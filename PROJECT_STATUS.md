@@ -40,10 +40,11 @@
 - 2026-05-07：`next build` 通過，產出 `/`、`/kids-reading`、`/admin` 與 API routes。
 - 2026-05-07：`tsc --noEmit` 通過。
 - 2026-05-07：`next lint` 通過，無 ESLint warnings 或 errors；但指令已 deprecated。
+- 2026-05-07：完成版 commit `c89a06e` 已建立，tag 為 `booking-complete-2026-05-07`。
+- 2026-05-07：GitHub origin 已設定為 `git@github.com:fanhe-yi/tine-booking-codex.git`，`main` 與完成版 tag 已推送完成。
 
 ## 下一步
 
-- 將目前完成版建立 git commit 與 tag，並推送到 GitHub origin。
 - 針對前台與後台做一次瀏覽器功能路徑驗收。
 - 評估是否將 lint script 從 `next lint` 遷移到 ESLint CLI。
 - 依使用者指定的優先順序安排設計、功能或部署任務。
