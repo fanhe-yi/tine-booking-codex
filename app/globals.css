@@ -108,6 +108,7 @@ button:disabled {
 
 .nav-cta,
 .hero-cta,
+.ghost-cta,
 .submit,
 .text-button,
 .ghost-button {
@@ -218,13 +219,15 @@ h1 {
 .ghost-button {
   min-height: 44px;
   padding: 0 18px;
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.08);
   color: #fff;
+  backdrop-filter: blur(3px);
 }
 
 .ghost-button {
   border-color: var(--line);
+  background: transparent;
   color: var(--ink);
 }
 
@@ -243,10 +246,10 @@ h1 {
 .hero-stat {
   min-height: 94px;
   padding: 18px;
-  background: rgba(255, 250, 245, 0.14);
+  background: rgba(255, 250, 245, 0.18);
   color: rgba(255, 255, 255, 0.82);
   line-height: 1.5;
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(4px);
 }
 
 .hero-stat strong {
@@ -307,6 +310,10 @@ h1 {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+}
+
+.single-service {
+  grid-template-columns: minmax(0, 760px);
 }
 
 .service-tile {
@@ -453,8 +460,7 @@ h1 {
 .admin-login,
 .calendar-panel,
 .day-panel,
-.block-form-panel,
-.admin-toolbar {
+.block-form-panel {
   border: 1px solid rgba(223, 208, 192, 0.95);
   border-radius: 8px;
   background: rgba(255, 250, 244, 0.98);
@@ -506,6 +512,11 @@ textarea {
   outline: none;
   background: #fff;
   color: var(--ink);
+}
+
+input[readonly] {
+  background: #fbf5ef;
+  color: var(--soft-ink);
 }
 
 textarea {
@@ -614,6 +625,40 @@ textarea:focus {
   font-weight: 800;
 }
 
+.success-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid rgba(45, 111, 104, 0.28);
+  border-radius: 8px;
+  background: #eef7f3;
+  color: var(--soft-ink);
+  line-height: 1.65;
+}
+
+.success-panel span {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.success-panel strong {
+  color: var(--ink);
+  font-size: 20px;
+}
+
+.success-panel p {
+  margin: 0;
+}
+
+.success-panel a {
+  width: fit-content;
+  margin-top: 4px;
+  color: var(--accent-strong);
+  font-weight: 850;
+}
+
 .location {
   grid-template-columns: minmax(310px, 0.78fr) minmax(420px, 1fr);
   align-items: stretch;
@@ -672,10 +717,69 @@ textarea:focus {
 }
 
 .footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 18px;
   padding: 28px 16px 38px;
   background: #ece1d5;
   color: var(--muted);
   text-align: center;
+}
+
+.footer a {
+  color: var(--accent-strong);
+  font-weight: 850;
+}
+
+.kids-page {
+  --accent: #4f8a66;
+  --accent-strong: #3d7351;
+  --gold: #d58d3a;
+  --deep: #3f4f3f;
+  --bg: #fff7eb;
+}
+
+.kids-page .site-header {
+  background: rgba(255, 247, 235, 0.92);
+}
+
+.kids-page .mark {
+  background: #f0a85f;
+}
+
+.kids-page .hero {
+  background: #463a2c;
+}
+
+.kids-page .hero-media {
+  object-position: 64% center;
+}
+
+.kids-page .hero-overlay {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(66, 48, 34, 0.78),
+      rgba(66, 48, 34, 0.3) 52%,
+      rgba(66, 48, 34, 0.04)
+    ),
+    linear-gradient(0deg, rgba(66, 48, 34, 0.58), rgba(66, 48, 34, 0.03) 58%);
+}
+
+.kids-page .band,
+.kids-page .footer {
+  background: #f3e3cf;
+}
+
+.kids-page .service-tile,
+.kids-page .booking,
+.kids-page .journey-item {
+  border-color: rgba(220, 185, 144, 0.9);
+}
+
+.kids-page .service-image {
+  height: 320px;
 }
 
 .admin-shell {
@@ -715,8 +819,7 @@ textarea:focus {
   line-height: 1.7;
 }
 
-.admin-topbar,
-.admin-toolbar {
+.admin-topbar {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -725,12 +828,6 @@ textarea:focus {
 
 .admin-topbar {
   margin-bottom: 20px;
-}
-
-.admin-toolbar {
-  align-items: center;
-  margin-bottom: 18px;
-  padding: 16px;
 }
 
 .admin-grid {
@@ -748,7 +845,7 @@ textarea:focus {
 
 .calendar-heading {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  grid-template-columns: 44px minmax(0, 1fr) 44px auto;
   gap: 10px;
   align-items: center;
   margin-bottom: 16px;
@@ -780,6 +877,44 @@ textarea:focus {
 
 .month-nav-button:disabled {
   opacity: 0.5;
+}
+
+.refresh-button {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--soft-ink);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.refresh-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.refresh-button:disabled {
+  opacity: 0.5;
+}
+
+.admin-inline-message {
+  min-height: 22px;
+  margin: -6px 0 10px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.admin-inline-message.error {
+  color: var(--danger);
+  font-weight: 800;
+}
+
+.admin-inline-message.success {
+  color: var(--accent-strong);
+  font-weight: 800;
 }
 
 .weekday-row,
@@ -885,6 +1020,12 @@ textarea:focus {
   padding-top: 8px;
   border-top: 1px solid var(--line);
   color: var(--soft-ink);
+}
+
+.admin-card-actions {
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
 }
 
 .block-card {
@@ -1019,11 +1160,6 @@ textarea:focus {
 
 @media (max-width: 680px) {
   .admin-topbar,
-  .admin-toolbar {
-    display: grid;
-    align-items: stretch;
-  }
-
   .weekday-row,
   .calendar-grid {
     gap: 5px;
@@ -1069,6 +1205,21 @@ textarea:focus {
     object-position: 70% center;
   }
 
+  .kids-page .hero-media {
+    object-position: 82% center;
+  }
+
+  .kids-page .hero-overlay {
+    background:
+      linear-gradient(
+        90deg,
+        rgba(66, 48, 34, 0.72),
+        rgba(66, 48, 34, 0.38) 58%,
+        rgba(66, 48, 34, 0.12)
+      ),
+      linear-gradient(0deg, rgba(66, 48, 34, 0.5), rgba(66, 48, 34, 0.04) 58%);
+  }
+
   h1 {
     font-size: 46px;
   }
@@ -1084,9 +1235,30 @@ textarea:focus {
     font-size: 17px;
   }
 
+  .hero-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .hero-cta,
+  .ghost-cta {
+    width: 100%;
+    min-height: 48px;
+    padding: 0 12px;
+    text-align: center;
+  }
+
+  .ghost-cta {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
   .hero-strip,
   .service-gallery,
   .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .single-service {
     grid-template-columns: 1fr;
   }
 
@@ -1106,6 +1278,10 @@ textarea:focus {
     height: 320px;
   }
 
+  .kids-page .service-image {
+    height: 260px;
+  }
+
   .booking {
     padding: 20px;
   }
@@ -1113,5 +1289,11 @@ textarea:focus {
   .summary,
   .service-meta {
     display: grid;
+  }
+}
+
+@media (max-width: 420px) {
+  .hero-actions {
+    grid-template-columns: 1fr;
   }
 }

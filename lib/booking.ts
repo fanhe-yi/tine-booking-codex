@@ -1,6 +1,6 @@
 export const BUSINESS_TIMEZONE = "Asia/Taipei";
-export const OPEN_HOUR = 11;
-export const CLOSE_HOUR = 20;
+export const OPEN_HOUR = 15;
+export const CLOSE_HOUR = 21;
 export const SLOT_STEP_MINUTES = 30;
 
 export type ServiceItem = {
@@ -18,19 +18,19 @@ export type BusyRange = {
   end_at: string;
 };
 
-export const SERVICES: ServiceItem[] = [
+export const EAR_SERVICES: ServiceItem[] = [
   {
     service: "sox",
     itemCode: "basic_ear_cleaning",
     name: "基礎採耳",
-    duration: 60,
+    duration: 40,
     price: 1200,
   },
   {
     service: "sox",
     itemCode: "deep_ear_care",
     name: "深層採耳保養",
-    duration: 90,
+    duration: 60,
     price: 1800,
   },
   {
@@ -44,9 +44,22 @@ export const SERVICES: ServiceItem[] = [
     service: "reading",
     itemCode: "consultation",
     name: "諮詢服務",
-    duration: 60,
+    duration: 100,
     price: 1000,
   },
+];
+
+export const KIDS_READING_SERVICE: ServiceItem = {
+  service: "reading",
+  itemCode: "kids_reading",
+  name: "陪讀",
+  duration: 60,
+  price: 300,
+};
+
+export const SERVICES: ServiceItem[] = [
+  ...EAR_SERVICES,
+  KIDS_READING_SERVICE,
 ];
 
 export function pad(value: number) {

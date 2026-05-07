@@ -5,9 +5,8 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   BusyRange,
   CLOSE_HOUR,
-  EAR_SERVICES,
+  KIDS_READING_SERVICE,
   OPEN_HOUR,
-  SLOT_STEP_MINUTES,
   dateAtTaipeiTime,
   formatDateTime,
   formatTime,
@@ -21,47 +20,21 @@ type Message = {
 };
 
 type ConfirmedBooking = {
-  serviceName: string;
   start: Date;
   end: Date;
   customerName: string;
 };
 
-const serviceDetails = {
-  basic_ear_cleaning: {
-    label: "基礎採耳",
-    image: "/images/basic-ear-cleaning.png",
-    description: "細緻清潔耳周與外耳，適合第一次體驗或日常保養。",
-    mood: "放鬆入門",
-  },
-  deep_ear_care: {
-    label: "深層採耳保養",
-    image: "/images/deep-ear-care.png",
-    description: "拉長服務節奏，搭配更完整的耳部護理與舒緩流程。",
-    mood: "深度沉浸",
-  },
-  ear_candle: {
-    label: "耳燭舒壓",
-    image: "/images/ear-candle-relax.png",
-    description: "柔和燈光與安靜氛圍，讓身體慢慢進入休息狀態。",
-    mood: "舒壓放空",
-  },
-  consultation: {
-    label: "耳部諮詢",
-    image: "/images/ear-consultation.png",
-    description: "先了解狀況與需求，再安排適合的耳部保養方式。",
-    mood: "安心評估",
-  },
-} as const;
+const service = KIDS_READING_SERVICE;
+const KIDS_SLOT_STEP_MINUTES = 60;
 
-const journeySteps = [
-  { title: "入店放鬆", text: "安靜空間、柔和燈光，先讓身體慢下來。" },
-  { title: "確認需求", text: "依照當天狀況與喜好，安排適合的服務節奏。" },
-  { title: "細緻保養", text: "採耳、耳燭或深層護理都以舒適感為核心。" },
+const readingSteps = [
+  { title: "閱讀陪伴", text: "用溫柔節奏陪孩子看書、說故事，慢慢進入專注。" },
+  { title: "讀玩樂", text: "加入小遊戲、圖卡或積木，讓學習保有輕鬆感。" },
+  { title: "安靜練習", text: "依孩子當天狀態安排任務，保留休息與鼓勵。" },
 ];
 
-export function BookingPage() {
-  const [serviceCode, setServiceCode] = useState(EAR_SERVICES[0].itemCode);
+export function KidsReadingPage() {
   const [dateValue, setDateValue] = useState("");
   const [busyRanges, setBusyRanges] = useState<BusyRange[]>([]);
   const [selectedStart, setSelectedStart] = useState<Date | null>(null);
@@ -73,13 +46,6 @@ export function BookingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmedBooking, setConfirmedBooking] =
     useState<ConfirmedBooking | null>(null);
-
-  const selectedService =
-    EAR_SERVICES.find((service) => service.itemCode === serviceCode) ||
-    EAR_SERVICES[0];
-  const selectedDetail =
-    serviceDetails[selectedService.itemCode as keyof typeof serviceDetails] ||
-    serviceDetails.basic_ear_cleaning;
 
   useEffect(() => {
     const today = new Date();
@@ -99,11 +65,10 @@ export function BookingPage() {
 
       setSelectedStart(null);
       setSelectedEnd(null);
-
       setMessage({ text: "正在讀取可預約時段..." });
+
       const from = dateAtTaipeiTime(dateValue, 0).toISOString();
       const to = dateAtTaipeiTime(dateValue, 23, 59).toISOString();
-
       const response = await fetch(
         `/api/booking/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
       );
@@ -127,7 +92,7 @@ export function BookingPage() {
     }
 
     loadBusyRanges();
-  }, [dateValue, serviceCode]);
+  }, [dateValue]);
 
   const slots = useMemo(() => {
     if (!dateValue) {
@@ -142,10 +107,10 @@ export function BookingPage() {
     for (
       let cursor = new Date(dayStart);
       cursor < dayEnd;
-      cursor = new Date(cursor.getTime() + SLOT_STEP_MINUTES * 60 * 1000)
+      cursor = new Date(cursor.getTime() + KIDS_SLOT_STEP_MINUTES * 60 * 1000)
     ) {
       const start = new Date(cursor);
-      const end = new Date(start.getTime() + selectedService.duration * 60000);
+      const end = new Date(start.getTime() + service.duration * 60000);
 
       if (end > dayEnd) {
         continue;
@@ -154,20 +119,12 @@ export function BookingPage() {
       output.push({
         start,
         end,
-        available:
-          start > now &&
-          isSlotAvailable(start, end, selectedService, busyRanges),
+        available: start > now && isSlotAvailable(start, end, service, busyRanges),
       });
     }
 
     return output;
-  }, [busyRanges, dateValue, selectedService]);
-
-  function chooseService(itemCode: string) {
-    setServiceCode(itemCode);
-    setConfirmedBooking(null);
-    document.getElementById("booking")?.scrollIntoView({ behavior: "smooth" });
-  }
+  }, [busyRanges, dateValue]);
 
   async function submitBooking(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -178,21 +135,21 @@ export function BookingPage() {
     }
 
     setIsSubmitting(true);
-    setMessage({ text: "正在送出預約..." });
+    setMessage({ text: "正在送出陪讀預約..." });
     setConfirmedBooking(null);
 
     const response = await fetch("/api/booking", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        service: selectedService.service,
-        item_code: selectedService.itemCode,
+        service: service.service,
+        item_code: service.itemCode,
         start_at: selectedStart.toISOString(),
         end_at: selectedEnd.toISOString(),
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
         note: note.trim() || null,
-        price: selectedService.price,
+        price: service.price,
       }),
     });
     const result = (await response.json().catch(() => null)) as {
@@ -203,7 +160,7 @@ export function BookingPage() {
     setIsSubmitting(false);
 
     if (!response.ok || !result) {
-      console.error("Unable to submit booking", result);
+      console.error("Unable to submit kids reading booking", result);
       setMessage({
         text:
           result?.code === "BOOKING_CONFLICT"
@@ -217,12 +174,11 @@ export function BookingPage() {
     }
 
     setConfirmedBooking({
-      serviceName: selectedService.name,
       start: selectedStart,
       end: selectedEnd,
       customerName: customerName.trim(),
     });
-    setMessage({ text: "預約已送出，我們已收到你的預約資料。", type: "success" });
+    setMessage({ text: "已收到陪讀預約，我們會再確認細節。", type: "success" });
     setCustomerName("");
     setCustomerPhone("");
     setNote("");
@@ -233,20 +189,19 @@ export function BookingPage() {
   const todayValue = toDateValue(new Date());
 
   return (
-    <>
+    <div className="kids-page">
       <header className="site-header">
         <nav className="nav" aria-label="主選單">
-          <a className="brand" href="#top" aria-label="襪子先生首頁">
+          <a className="brand" href="#top" aria-label="襪子先生陪讀首頁">
             <span className="mark" aria-hidden="true">
               襪
             </span>
             <span>襪子先生</span>
           </a>
           <div className="links">
-            <a href="#services">服務項目</a>
-            <a href="#space">環境體驗</a>
+            <a href="#services">陪讀項目</a>
+            <a href="#space">陪伴方式</a>
             <a href="#booking">線上預約</a>
-            <a href="#location">位置</a>
           </div>
           <a className="nav-cta" href="#booking">
             立即預約
@@ -255,51 +210,51 @@ export function BookingPage() {
       </header>
 
       <main id="top">
-        <section className="hero" aria-label="襪子先生採耳形象">
+        <section className="hero" aria-label="襪子先生陪讀形象">
           <Image
             className="hero-media"
-            src="/images/hero-ear-spa.png"
-            alt="溫暖放鬆的採耳空間"
+            src="/images/kids-reading-hero.png"
+            alt="溫馨可愛的兒童陪讀空間"
             fill
             priority
             sizes="100vw"
           />
           <div className="hero-overlay" />
           <div className="hero-inner">
-            <p className="eyebrow">耳部保養｜採耳放鬆｜耳燭舒壓</p>
-            <h1>襪子先生採耳</h1>
+            <p className="eyebrow">陪伴閱讀｜讀玩樂｜安靜練習</p>
+            <h1>襪子先生陪讀</h1>
             <p className="hero-copy">
-              在柔和燈光與安靜節奏裡，完成一段細緻、舒服、讓人真正放鬆的耳部保養。
+              用溫柔陪伴與小小遊戲，讓孩子在放鬆的節奏裡閱讀、表達，也慢慢建立專注感。
             </p>
             <div className="hero-actions">
               <a className="hero-cta" href="#booking">
-                預約放鬆時段
+                預約陪讀時段
               </a>
               <a className="ghost-cta" href="#services">
-                查看服務項目
+                查看陪讀項目
               </a>
             </div>
-            <div className="hero-strip" aria-label="服務重點">
+            <div className="hero-strip" aria-label="陪讀重點">
               <div className="hero-stat">
-                <strong>安靜包廂</strong>慢下來的私人時光
+                <strong>1 小時</strong>穩定陪伴節奏
               </div>
               <div className="hero-stat">
-                <strong>細緻採耳</strong>耳部清潔與放鬆並重
+                <strong>讀玩樂</strong>閱讀與遊戲並行
               </div>
               <div className="hero-stat">
-                <strong>耳燭舒壓</strong>柔和儀式感體驗
+                <strong>NT$ 300</strong>簡單好安排
               </div>
             </div>
           </div>
         </section>
 
-        <section className="section intro-section" aria-label="品牌介紹">
+        <section className="section intro-section" aria-label="陪讀介紹">
           <div>
-            <p className="section-kicker">A quiet ear care ritual</p>
-            <h2>把耳部保養，變成一段安靜放鬆的儀式</h2>
+            <p className="section-kicker">A warm reading hour</p>
+            <h2>陪孩子讀一點、玩一點，也慢慢安定下來</h2>
           </div>
           <p className="section-lead">
-            採耳重點不只是清潔，更是節奏、距離感與舒適度。從躺下開始，讓耳朵被細心照顧，也讓身體慢慢進入休息狀態。
+            陪讀不是考試壓力，而是有人在旁邊穩穩陪著。從故事、圖卡到小遊戲，依孩子狀態安排一段舒服的學習時間。
           </p>
         </section>
 
@@ -307,66 +262,61 @@ export function BookingPage() {
           <div className="section">
             <div className="section-head">
               <div>
-                <p className="section-kicker">Services</p>
-                <h2>選一段適合今天的耳部保養</h2>
+                <p className="section-kicker">Service</p>
+                <h2>陪讀</h2>
               </div>
               <p className="section-lead">
-                每個服務都有不同節奏。想初次體驗、深度放鬆，或安排耳燭舒壓，都可以直接從下方選擇。
+                適合需要短時間陪伴閱讀、練習表達，或在遊戲中慢慢進入學習狀態的孩子。
               </p>
             </div>
 
-            <div className="service-gallery">
-              {EAR_SERVICES.map((service) => {
-                const detail =
-                  serviceDetails[
-                    service.itemCode as keyof typeof serviceDetails
-                  ] || serviceDetails.basic_ear_cleaning;
-
-                return (
-                  <article className="service-tile" key={service.itemCode}>
-                    <div className="service-image">
-                      <Image
-                        src={detail.image}
-                        alt={`${detail.label}服務情境`}
-                        fill
-                        sizes="(max-width: 920px) 100vw, 25vw"
-                      />
-                    </div>
-                    <div className="service-body">
-                      <span>{detail.mood}</span>
-                      <h3>{service.name}</h3>
-                      <p>{detail.description}</p>
-                      <div className="service-meta">
-                        <strong>{service.duration} 分鐘</strong>
-                        <strong>
-                          NT$ {service.price.toLocaleString("zh-TW")}
-                        </strong>
-                      </div>
-                      <button
-                        className="text-button"
-                        type="button"
-                        onClick={() => chooseService(service.itemCode)}
-                      >
-                        選這個服務
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
+            <div className="service-gallery single-service">
+              <article className="service-tile">
+                <div className="service-image">
+                  <Image
+                    src="/images/kids-reading-service.png"
+                    alt="陪讀服務情境"
+                    fill
+                    sizes="(max-width: 920px) 100vw, 48vw"
+                  />
+                </div>
+                <div className="service-body">
+                  <span>溫馨陪伴</span>
+                  <h3>{service.name}</h3>
+                  <p>
+                    以閱讀、故事互動與簡單遊戲陪孩子度過一段穩定時間，讓學習變得輕鬆可親。
+                  </p>
+                  <div className="service-meta">
+                    <strong>{service.duration} 分鐘</strong>
+                    <strong>NT$ {service.price.toLocaleString("zh-TW")}</strong>
+                  </div>
+                  <button
+                    className="text-button"
+                    type="button"
+                    onClick={() =>
+                      document
+                        .getElementById("booking")
+                        ?.scrollIntoView({ behavior: "smooth" })
+                    }
+                  >
+                    預約這個時段
+                  </button>
+                </div>
+              </article>
             </div>
           </div>
         </section>
 
         <section className="section space-section" id="space">
           <div className="space-copy">
-            <p className="section-kicker">Experience</p>
-            <h2>溫暖、安靜、沒有壓力的採耳空間</h2>
+            <p className="section-kicker">How it works</p>
+            <h2>讀書、遊戲與陪伴，安排在同一段安靜時間裡</h2>
             <p>
-              以柔和木質、乾淨器具與低干擾動線，讓客人不用被過度打擾。服務過程保留充分時間，專心感受耳部被照顧的舒適。
+              每次陪讀都以孩子當天狀態為主，保留彈性與鼓勵。想安靜看書、練習表達，或加入一點玩樂，都可以在備註中告訴我們。
             </p>
           </div>
           <div className="journey-list">
-            {journeySteps.map((step, index) => (
+            {readingSteps.map((step, index) => (
               <div className="journey-item" key={step.title}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
                 <div>
@@ -382,18 +332,18 @@ export function BookingPage() {
           <aside className="booking-aside" aria-label="預約服務預覽">
             <div className="aside-photo">
               <Image
-                src={selectedDetail.image}
-                alt={`${selectedService.name}預覽`}
+                src="/images/kids-reading-service.png"
+                alt="陪讀預覽"
                 fill
                 sizes="(max-width: 920px) 100vw, 34vw"
               />
             </div>
             <div className="aside-note">
               <span>目前選擇</span>
-              <strong>{selectedService.name}</strong>
+              <strong>{service.name}</strong>
               <p>
-                {selectedService.duration} 分鐘｜NT${" "}
-                {selectedService.price.toLocaleString("zh-TW")}
+                {service.duration} 分鐘｜NT${" "}
+                {service.price.toLocaleString("zh-TW")}
               </p>
             </div>
           </aside>
@@ -402,27 +352,13 @@ export function BookingPage() {
             <div className="form-head">
               <p className="section-kicker">Booking</p>
               <h2>線上預約</h2>
-              <p className="hint">選擇服務、日期與時段，再留下聯絡方式。</p>
+              <p className="hint">選擇日期與時段，再留下聯絡方式。</p>
             </div>
 
             <div className="grid">
               <label>
-                服務項目
-                <select
-                  value={serviceCode}
-                  onChange={(event) => {
-                    setServiceCode(event.target.value);
-                    setConfirmedBooking(null);
-                  }}
-                  required
-                >
-                  {EAR_SERVICES.map((service) => (
-                    <option key={service.itemCode} value={service.itemCode}>
-                      {service.name}｜{service.duration} 分｜NT${" "}
-                      {service.price.toLocaleString("zh-TW")}
-                    </option>
-                  ))}
-                </select>
+                預約項目
+                <input readOnly value={`${service.name}｜60 分｜NT$ 300`} />
               </label>
 
               <label>
@@ -473,7 +409,7 @@ export function BookingPage() {
                 姓名
                 <input
                   autoComplete="name"
-                  placeholder="請輸入姓名"
+                  placeholder="請輸入家長姓名"
                   value={customerName}
                   onChange={(event) => setCustomerName(event.target.value)}
                   required
@@ -495,7 +431,7 @@ export function BookingPage() {
               <label className="wide">
                 備註
                 <textarea
-                  placeholder="可填寫想詢問的事項或不方便的時間"
+                  placeholder="可填寫孩子年齡、閱讀需求，或不方便的時間"
                   value={note}
                   onChange={(event) => setNote(event.target.value)}
                 />
@@ -507,17 +443,15 @@ export function BookingPage() {
                 預約內容
                 <strong>
                   {selectedStart && selectedEnd
-                    ? `${selectedService.name}，${formatDateTime(
-                        selectedStart,
-                      )}-${formatTime(selectedEnd)}`
+                    ? `${service.name}，${formatDateTime(selectedStart)}-${formatTime(
+                        selectedEnd,
+                      )}`
                     : "尚未選擇時段"}
                 </strong>
               </div>
               <div>
                 費用
-                <strong>
-                  NT$ {selectedService.price.toLocaleString("zh-TW")}
-                </strong>
+                <strong>NT$ {service.price.toLocaleString("zh-TW")}</strong>
               </div>
             </div>
 
@@ -529,59 +463,25 @@ export function BookingPage() {
             </div>
             {confirmedBooking && (
               <div className="success-panel" role="status" aria-live="polite">
-                <span>預約收到</span>
+                <span>陪讀預約收到</span>
                 <strong>
                   {confirmedBooking.customerName
-                    ? `${confirmedBooking.customerName}，你的預約已送出`
-                    : "你的預約已送出"}
+                    ? `${confirmedBooking.customerName}，已收到你的陪讀預約`
+                    : "已收到你的陪讀預約"}
                 </strong>
                 <p>
-                  {confirmedBooking.serviceName}｜
-                  {formatDateTime(confirmedBooking.start)}-
+                  {service.name}｜{formatDateTime(confirmedBooking.start)}-
                   {formatTime(confirmedBooking.end)}
                 </p>
-                <p>請留意後續確認訊息，期待讓你舒服地放鬆一下。</p>
-                <a href="#location">查看店面位置</a>
+                <p>請留意後續確認訊息，我們會一起安排適合孩子的陪讀節奏。</p>
               </div>
             )}
           </form>
         </section>
-
-        <section className="band" id="location">
-          <div className="section location">
-            <div className="location-card">
-              <p className="section-kicker">Location</p>
-              <h2>店面位置</h2>
-              <p className="address">
-                交通便利，建議依預約時間提前抵達。詳細位置可直接在地圖中開啟導航。
-              </p>
-              <div className="info-row">
-                <span>地址</span>
-                <strong>高雄市三民區建興路99巷20弄3號4樓</strong>
-              </div>
-              <div className="info-row">
-                <span>營業時間</span>
-                <strong>每日 15:00-21:00</strong>
-              </div>
-              <div className="info-row">
-                <span>提醒</span>
-                <strong>預約確認後再前往</strong>
-              </div>
-            </div>
-            <div className="map-frame" aria-label="Google 地圖">
-              <iframe
-                title="襪子先生採耳位置地圖"
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-                src="https://www.google.com/maps?q=%E9%AB%98%E9%9B%84%E5%B8%82%E4%B8%89%E6%B0%91%E5%8D%80%E5%BB%BA%E8%88%88%E8%B7%AF99%E5%B7%B720%E5%BC%843%E8%99%9F4%E6%A8%93&output=embed"
-              />
-            </div>
-          </div>
-        </section>
       </main>
 
       <footer className="footer">
-        <span>襪子先生｜線上預約</span>
+        <span>襪子先生｜陪讀預約</span>
         <span>
           designed by{" "}
           <a href="https://www.chen-yi.tw" rel="noreferrer" target="_blank">
@@ -589,6 +489,6 @@ export function BookingPage() {
           </a>
         </span>
       </footer>
-    </>
+    </div>
   );
 }

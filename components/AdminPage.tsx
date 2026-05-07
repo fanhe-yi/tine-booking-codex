@@ -208,6 +208,29 @@ export function AdminPage() {
     await loadCalendar();
   }
 
+  async function deleteBooking(id: string | number) {
+    const confirmed = window.confirm("確定要刪除這筆預約嗎？此操作無法復原。");
+    if (!confirmed) {
+      return;
+    }
+
+    setIsLoading(true);
+    const response = await fetch(
+      `/api/admin/bookings?id=${encodeURIComponent(String(id))}`,
+      { method: "DELETE" },
+    );
+    setIsLoading(false);
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      setMessage({ text: payload.error || "刪除預約失敗。", type: "error" });
+      return;
+    }
+
+    setMessage({ text: "預約已刪除。", type: "success" });
+    await loadCalendar();
+  }
+
   const selectedBookings = data.bookings.filter(
     (booking) => toDateValue(new Date(booking.start_at)) === selectedDate,
   );
@@ -258,15 +281,6 @@ export function AdminPage() {
         </button>
       </header>
 
-      <section className="admin-toolbar">
-        <button className="nav-cta" disabled={isLoading} onClick={loadCalendar}>
-          重新整理
-        </button>
-        <div className={`message ${message.type || ""}`} role="status">
-          {message.text}
-        </div>
-      </section>
-
       <section className="admin-grid">
         <div className="calendar-panel">
           <div className="calendar-heading">
@@ -289,6 +303,18 @@ export function AdminPage() {
             >
               ›
             </button>
+            <button
+              aria-label="重新整理行事曆"
+              className="refresh-button"
+              disabled={isLoading}
+              type="button"
+              onClick={loadCalendar}
+            >
+              重新整理
+            </button>
+          </div>
+          <div className={`admin-inline-message ${message.type || ""}`} role="status">
+            {message.text}
           </div>
           <div className="weekday-row">
             {["日", "一", "二", "三", "四", "五", "六"].map((day) => (
@@ -349,6 +375,16 @@ export function AdminPage() {
                   NT$ {Number(booking.price || 0).toLocaleString("zh-TW")}
                 </p>
                 {booking.note ? <p className="note">{booking.note}</p> : null}
+                <div className="admin-card-actions">
+                  <button
+                    className="danger-button"
+                    disabled={isLoading}
+                    type="button"
+                    onClick={() => deleteBooking(booking.id)}
+                  >
+                    刪除預約
+                  </button>
+                </div>
               </article>
             ))}
             {!selectedBookings.length ? (
