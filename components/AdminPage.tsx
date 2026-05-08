@@ -423,8 +423,18 @@ export function AdminPage() {
                   onClick={() => setSelectedDate(value)}
                 >
                   <strong>{day.getDate()}</strong>
-                  <span>{bookings.length ? `${bookings.length} 筆預約` : ""}</span>
-                  <span>{blocks.length ? `${blocks.length} 段休假` : ""}</span>
+                  {bookings.length ? (
+                    <span className="calendar-day-status">
+                      <span>預約</span>
+                      {bookings.length}
+                    </span>
+                  ) : null}
+                  {blocks.length ? (
+                    <span className="calendar-day-status">
+                      <span>休假</span>
+                      {blocks.length}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
@@ -508,6 +518,39 @@ export function AdminPage() {
               <p className="empty-state">這天沒有休假。</p>
             ) : null}
           </div>
+
+          <form className="block-form" onSubmit={createBlockedSlot}>
+            <h2>新增休假</h2>
+            <label>
+              開始
+              <input
+                type="datetime-local"
+                value={blockStart}
+                onChange={(event) => setBlockStart(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              結束
+              <input
+                type="datetime-local"
+                value={blockEnd}
+                onChange={(event) => setBlockEnd(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              原因
+              <input
+                placeholder="例：公休、店休、私人行程"
+                value={blockReason}
+                onChange={(event) => setBlockReason(event.target.value)}
+              />
+            </label>
+            <button className="submit" disabled={isLoading} type="submit">
+              新增休假
+            </button>
+          </form>
         </aside>
       </section>
 
@@ -539,39 +582,6 @@ export function AdminPage() {
             {lineSettingsMessage.text}
           </div>
         </div>
-
-        <form className="block-form" onSubmit={createBlockedSlot}>
-          <h2>新增休假</h2>
-          <label>
-            開始
-            <input
-              type="datetime-local"
-              value={blockStart}
-              onChange={(event) => setBlockStart(event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            結束
-            <input
-              type="datetime-local"
-              value={blockEnd}
-              onChange={(event) => setBlockEnd(event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            原因
-            <input
-              placeholder="例：公休、店休、私人行程"
-              value={blockReason}
-              onChange={(event) => setBlockReason(event.target.value)}
-            />
-          </label>
-          <button className="submit" disabled={isLoading} type="submit">
-            新增休假
-          </button>
-        </form>
       </section>
     </main>
   );
