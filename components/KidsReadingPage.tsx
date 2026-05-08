@@ -24,6 +24,7 @@ type ConfirmedBooking = {
   start: Date;
   end: Date;
   customerName: string;
+  price: number;
 };
 
 const service = KIDS_READING_SERVICE;
@@ -128,6 +129,58 @@ export function KidsReadingPage() {
     return output;
   }, [busyRanges, dateValue]);
 
+  const selectedHours =
+    selectedStart && selectedEnd
+      ? Math.max(
+          1,
+          Math.round(
+            (selectedEnd.getTime() - selectedStart.getTime()) /
+              (60 * 60 * 1000),
+          ),
+        )
+      : 1;
+  const selectedPrice = selectedHours * service.price;
+
+  function isSlotInSelectedRange(slot: { start: Date; end: Date }) {
+    return (
+      !!selectedStart &&
+      !!selectedEnd &&
+      slot.start >= selectedStart &&
+      slot.end <= selectedEnd
+    );
+  }
+
+  function canExtendRangeTo(targetStart: Date) {
+    if (!selectedStart) {
+      return true;
+    }
+
+    return slots
+      .filter((slot) => slot.start >= selectedStart && slot.start <= targetStart)
+      .every((slot) => slot.available);
+  }
+
+  function chooseSlot(slot: { start: Date; end: Date; available: boolean }) {
+    if (!slot.available) {
+      return;
+    }
+
+    setConfirmedBooking(null);
+
+    if (
+      !selectedStart ||
+      !selectedEnd ||
+      slot.start <= selectedStart ||
+      !canExtendRangeTo(slot.start)
+    ) {
+      setSelectedStart(slot.start);
+      setSelectedEnd(slot.end);
+      return;
+    }
+
+    setSelectedEnd(slot.end);
+  }
+
   async function submitBooking(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -151,7 +204,7 @@ export function KidsReadingPage() {
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
         note: note.trim() || null,
-        price: service.price,
+        price: selectedPrice,
         line_access_token: lineLiff.accessToken,
       }),
     });
@@ -180,6 +233,7 @@ export function KidsReadingPage() {
       start: selectedStart,
       end: selectedEnd,
       customerName: customerName.trim(),
+      price: selectedPrice,
     });
     setMessage({ text: "已收到陪讀預約，我們會再確認細節。", type: "success" });
     setCustomerName("");
@@ -355,7 +409,9 @@ export function KidsReadingPage() {
             <div className="form-head">
               <p className="section-kicker">Booking</p>
               <h2>線上預約</h2>
-              <p className="hint">選擇日期與時段，再留下聯絡方式。</p>
+              <p className="hint">
+                可連續選擇多個陪讀時段，再留下聯絡方式。
+              </p>
             </div>
 
             <div className="grid">
@@ -377,6 +433,8 @@ export function KidsReadingPage() {
                   value={dateValue}
                   onChange={(event) => {
                     setDateValue(event.target.value);
+                    setSelectedStart(null);
+                    setSelectedEnd(null);
                     setConfirmedBooking(null);
                   }}
                   required
@@ -390,18 +448,15 @@ export function KidsReadingPage() {
                     {slots.map((slot) => (
                       <button
                         className={`slot ${
-                          selectedStart?.getTime() === slot.start.getTime()
+                          isSlotInSelectedRange(slot)
                             ? "selected"
                             : ""
                         }`}
                         disabled={!slot.available}
                         key={slot.start.toISOString()}
                         type="button"
-                        onClick={() => {
-                          setSelectedStart(slot.start);
-                          setSelectedEnd(slot.end);
-                          setConfirmedBooking(null);
-                        }}
+                        aria-pressed={isSlotInSelectedRange(slot)}
+                        onClick={() => chooseSlot(slot)}
                       >
                         {formatTime(slot.start)}
                       </button>
@@ -459,7 +514,7 @@ export function KidsReadingPage() {
               </div>
               <div>
                 費用
-                <strong>NT$ {service.price.toLocaleString("zh-TW")}</strong>
+                <strong>NT$ {selectedPrice.toLocaleString("zh-TW")}</strong>
               </div>
             </div>
 
@@ -481,6 +536,7 @@ export function KidsReadingPage() {
                   {service.name}｜{formatDateTime(confirmedBooking.start)}-
                   {formatTime(confirmedBooking.end)}
                 </p>
+                <p>費用 NT$ {confirmedBooking.price.toLocaleString("zh-TW")}</p>
                 <p>請留意後續確認訊息，我們會一起安排適合孩子的陪讀節奏。</p>
               </div>
             )}

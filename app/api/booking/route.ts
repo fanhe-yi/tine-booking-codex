@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { SERVICES } from "@/lib/booking";
+import {
+  BUSINESS_TIMEZONE,
+  CLOSE_HOUR,
+  KIDS_READING_SERVICE,
+  OPEN_HOUR,
+  SERVICES,
+} from "@/lib/booking";
 import {
   buildCustomerConfirmationText,
   buildShopBookingText,
@@ -12,6 +18,30 @@ import {
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 
 type SupabaseClient = ReturnType<typeof createServiceSupabaseClient>;
+
+function taipeiParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+    minute: "2-digit",
+    month: "2-digit",
+    timeZone: BUSINESS_TIMEZONE,
+    year: "numeric",
+  }).formatToParts(date);
+
+  return Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)]),
+  ) as {
+    day: number;
+    hour: number;
+    minute: number;
+    month: number;
+    year: number;
+  };
+}
 
 async function getNotifyCustomerEnabled(
   supabase: SupabaseClient,
@@ -66,7 +96,43 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "預約時間格式不正確。" }, { status: 400 });
   }
 
-  if (end <= start || end.getTime() - start.getTime() > 4 * 60 * 60 * 1000) {
+  const durationMs = end.getTime() - start.getTime();
+  const hourMs = 60 * 60 * 1000;
+  const isKidsReading =
+    selectedService.itemCode === KIDS_READING_SERVICE.itemCode;
+  let bookingPrice = selectedService.price;
+
+  if (durationMs <= 0) {
+    return NextResponse.json({ error: "預約時間不正確。" }, { status: 400 });
+  }
+
+  if (isKidsReading) {
+    const startParts = taipeiParts(start);
+    const endParts = taipeiParts(end);
+    const isSameTaipeiDate =
+      startParts.year === endParts.year &&
+      startParts.month === endParts.month &&
+      startParts.day === endParts.day;
+    const isWithinBusinessHours =
+      startParts.hour >= OPEN_HOUR &&
+      endParts.hour <= CLOSE_HOUR &&
+      startParts.minute === 0 &&
+      endParts.minute === 0;
+    const isWholeHour = durationMs % hourMs === 0;
+    const hours = durationMs / hourMs;
+
+    if (
+      !isSameTaipeiDate ||
+      !isWithinBusinessHours ||
+      !isWholeHour ||
+      hours < 1 ||
+      hours > 6
+    ) {
+      return NextResponse.json({ error: "預約時間不正確。" }, { status: 400 });
+    }
+
+    bookingPrice = hours * selectedService.price;
+  } else if (durationMs !== selectedService.duration * 60 * 1000) {
     return NextResponse.json({ error: "預約時間不正確。" }, { status: 400 });
   }
 
@@ -87,7 +153,7 @@ export async function POST(request: Request) {
     customer_name: body.customer_name.trim(),
     customer_phone: body.customer_phone.trim(),
     note: body.note?.trim() || null,
-    price: selectedService.price,
+    price: bookingPrice,
     status: "confirmed",
     ...(lineProfile
       ? {
@@ -112,7 +178,7 @@ export async function POST(request: Request) {
       customer_name: body.customer_name.trim(),
       customer_phone: body.customer_phone.trim(),
       note: body.note?.trim() || null,
-      price: selectedService.price,
+      price: bookingPrice,
       status: "confirmed",
     };
     const retry = await supabase
