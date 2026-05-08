@@ -19,14 +19,15 @@ export async function GET(request: Request) {
   }
 
   const supabase = createServiceSupabaseClient();
+  const bookingSelect =
+    "id,service,item_code,start_at,end_at,customer_name,customer_phone,note,price,status,line_user_id,line_display_name,line_channel,line_confirmed_at,line_reminded_at";
+  const baseBookingSelect =
+    "id,service,item_code,start_at,end_at,customer_name,customer_phone,note,price,status";
 
-  const [{ data: bookings, error: bookingError }, { data: blockedSlots, error: blockedError }] =
-    await Promise.all([
+  const [bookingResult, blockedSlotResult] = await Promise.all([
       supabase
         .from("bookings")
-        .select(
-          "id,service,item_code,start_at,end_at,customer_name,customer_phone,note,price,status",
-        )
+        .select(bookingSelect)
         .lt("start_at", to)
         .gt("end_at", from)
         .order("start_at", { ascending: true }),
@@ -37,6 +38,22 @@ export async function GET(request: Request) {
         .gt("end_at", from)
         .order("start_at", { ascending: true }),
     ]);
+  let bookings: unknown[] | null = bookingResult.data;
+  let bookingError = bookingResult.error;
+  const blockedSlots = blockedSlotResult.data;
+  const blockedError = blockedSlotResult.error;
+
+  if (bookingError && bookingError.message.includes("line_")) {
+    const retry = await supabase
+      .from("bookings")
+      .select(baseBookingSelect)
+      .lt("start_at", to)
+      .gt("end_at", from)
+      .order("start_at", { ascending: true });
+
+    bookings = retry.data;
+    bookingError = retry.error;
+  }
 
   if (bookingError || blockedError) {
     return NextResponse.json(

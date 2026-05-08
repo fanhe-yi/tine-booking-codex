@@ -13,6 +13,7 @@ import {
   isSlotAvailable,
   toDateValue,
 } from "@/lib/booking";
+import { useLineLiff } from "@/components/useLineLiff";
 
 type Message = {
   text: string;
@@ -46,6 +47,7 @@ export function KidsReadingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmedBooking, setConfirmedBooking] =
     useState<ConfirmedBooking | null>(null);
+  const lineLiff = useLineLiff(process.env.NEXT_PUBLIC_READING_LIFF_ID);
 
   useEffect(() => {
     const today = new Date();
@@ -150,6 +152,7 @@ export function KidsReadingPage() {
         customer_phone: customerPhone.trim(),
         note: note.trim() || null,
         price: service.price,
+        line_access_token: lineLiff.accessToken,
       }),
     });
     const result = (await response.json().catch(() => null)) as {
@@ -356,6 +359,11 @@ export function KidsReadingPage() {
             </div>
 
             <div className="grid">
+              <div className={`line-status wide ${lineLiff.status}`}>
+                <span>LINE 提醒</span>
+                <strong>{lineLiff.message}</strong>
+              </div>
+
               <label>
                 預約項目
                 <input readOnly value={`${service.name}｜60 分｜NT$ 300`} />

@@ -1,6 +1,35 @@
 import { NextResponse } from "next/server";
 import { SERVICES } from "@/lib/booking";
+import {
+  buildCustomerConfirmationText,
+  buildShopBookingText,
+  defaultCustomerNotificationSettings,
+  getLineChannelConfig,
+  lineChannelFromService,
+  pushLineText,
+  verifyLiffAccessToken,
+} from "@/lib/line";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
+
+type SupabaseClient = ReturnType<typeof createServiceSupabaseClient>;
+
+async function getNotifyCustomerEnabled(
+  supabase: SupabaseClient,
+  service: "sox" | "reading",
+) {
+  const { data, error } = await supabase
+    .from("line_notification_settings")
+    .select("notify_customer_enabled")
+    .eq("service", service)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Unable to load LINE notification settings", error);
+    return defaultCustomerNotificationSettings[service];
+  }
+
+  return data?.notify_customer_enabled ?? defaultCustomerNotificationSettings[service];
+}
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as {
@@ -12,6 +41,7 @@ export async function POST(request: Request) {
     customer_phone?: string;
     note?: string | null;
     price?: number;
+    line_access_token?: string | null;
   } | null;
 
   const selectedService = SERVICES.find(
@@ -45,9 +75,36 @@ export async function POST(request: Request) {
   }
 
   const supabase = createServiceSupabaseClient();
-  const { data, error } = await supabase
+  const lineChannel = lineChannelFromService(selectedService.service);
+  const lineProfile = body.line_access_token
+    ? await verifyLiffAccessToken(body.line_access_token, lineChannel)
+    : null;
+  const bookingPayload = {
+    service: selectedService.service,
+    item_code: selectedService.itemCode,
+    start_at: start.toISOString(),
+    end_at: end.toISOString(),
+    customer_name: body.customer_name.trim(),
+    customer_phone: body.customer_phone.trim(),
+    note: body.note?.trim() || null,
+    price: selectedService.price,
+    status: "confirmed",
+    ...(lineProfile
+      ? {
+          line_user_id: lineProfile.userId,
+          line_display_name: lineProfile.displayName,
+          line_channel: lineChannel,
+        }
+      : {}),
+  };
+  let { data, error } = await supabase
     .from("bookings")
-    .insert({
+    .insert(bookingPayload)
+    .select("id,item_code,start_at,end_at,customer_name,customer_phone,note")
+    .single();
+
+  if (error && lineProfile && error.message.includes("line_")) {
+    const retryPayload = {
       service: selectedService.service,
       item_code: selectedService.itemCode,
       start_at: start.toISOString(),
@@ -57,9 +114,16 @@ export async function POST(request: Request) {
       note: body.note?.trim() || null,
       price: selectedService.price,
       status: "confirmed",
-    })
-    .select("id,start_at,end_at")
-    .single();
+    };
+    const retry = await supabase
+      .from("bookings")
+      .insert(retryPayload)
+      .select("id,item_code,start_at,end_at,customer_name,customer_phone,note")
+      .single();
+
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     const conflictCodes = [
@@ -80,5 +144,71 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ booking: data });
+  if (!data) {
+    return NextResponse.json(
+      { code: "BOOKING_FAILED", error: "預約建立失敗。" },
+      { status: 500 },
+    );
+  }
+
+  const adminUserId = getLineChannelConfig(lineChannel).adminUserId;
+  const shopNotification = pushLineText(
+    lineChannel,
+    adminUserId,
+    buildShopBookingText({
+      id: data.id,
+      itemCode: data.item_code,
+      startAt: data.start_at,
+      endAt: data.end_at,
+      customerName: data.customer_name,
+      customerPhone: data.customer_phone,
+      note: data.note,
+    }),
+  );
+  const notifyCustomer = await getNotifyCustomerEnabled(supabase, lineChannel);
+  const customerNotification =
+    lineProfile && notifyCustomer
+      ? pushLineText(
+          lineChannel,
+          lineProfile.userId,
+          buildCustomerConfirmationText({
+            id: data.id,
+            itemCode: data.item_code,
+            startAt: data.start_at,
+            endAt: data.end_at,
+            customerName: data.customer_name,
+            customerPhone: data.customer_phone,
+            note: data.note,
+          }),
+        )
+      : Promise.resolve({
+          ok: false,
+          skipped: true,
+          error: "Customer LINE notification disabled or unavailable.",
+        });
+
+  const [shopResult, customerResult] = await Promise.allSettled([
+    shopNotification,
+    customerNotification,
+  ]);
+  const customerDelivered =
+    customerResult.status === "fulfilled" && customerResult.value.ok;
+
+  if (customerDelivered) {
+    await supabase
+      .from("bookings")
+      .update({ line_confirmed_at: new Date().toISOString() })
+      .eq("id", data.id);
+  }
+
+  return NextResponse.json({
+    booking: data,
+    line: {
+      channel: lineChannel,
+      customerLinked: Boolean(lineProfile),
+      customerNotificationEnabled: notifyCustomer,
+      customerDelivered,
+      shopDelivered: shopResult.status === "fulfilled" && shopResult.value.ok,
+    },
+  });
 }

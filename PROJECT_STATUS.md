@@ -1,6 +1,6 @@
 # 專案監管紀錄
 
-更新日期：2026-05-07
+更新日期：2026-05-08
 
 ## 專案定位
 
@@ -12,9 +12,9 @@
 - 前台功能：採耳預約單頁、陪讀預約單頁、服務介紹、日期與時段選擇、顧客資料填寫、預約送出。
 - 後台功能：密碼登入、行事曆檢視、預約管理、休假時段新增與刪除。
 - 部署設定：已有 `vercel.json`、`netlify.toml` 與 README 環境變數說明。
-- 資料庫設定：已有公開預約與後台存取 SQL 腳本。
+- 資料庫設定：已有公開預約、後台存取與 LINE 通知 SQL 腳本。
 - 環境設定：已有 `.env.example` 與 `.env.local`。
-- LINE 設定：暫緩，等網站正式上線並完成基本預約流程驗收後再接 LIFF 與 Messaging API。
+- LINE 設定：已加入採耳與陪讀兩組官方 LINE 的 LIFF、Messaging API、webhook、店家通知、客戶通知開關與前一天提醒設計。
 
 ## 管理原則
 
@@ -26,9 +26,9 @@
 
 ## 目前風險
 
-- GitHub origin 已建立；目前需先提交與推送 Vercel-only 上線設定。
+- LINE 串接前已建立 tag `pre-line-live-2026-05-08`，可回到 Vercel-only 上線版本。
 - `package.json` 仍使用 `next lint`；目前可執行，但 Next 提示此指令會在 Next.js 16 移除，後續應遷移到 ESLint CLI。
-- 尚未在正式 Vercel 與 Production Supabase 完成實機部署驗收。
+- LINE 功能仍需在 Supabase Production 執行 `supabase_line_notifications.sql`，並於 Vercel/LINE Developers Console 設定兩組 channel 與 LIFF。
 
 ## 驗收紀錄
 
@@ -45,12 +45,20 @@
 - 2026-05-07：GitHub origin 已設定為 `git@github.com:fanhe-yi/tine-booking-codex.git`，`main` 與完成版 tag 已推送完成。
 - 2026-05-07：LINE 功能決議暫緩；目前版本先專注網站上線。
 - 2026-05-07：Vercel-only 部署設定建置完成，未啟用 LINE cron 或 webhook。
+- 2026-05-08：LINE 串接前基準 tag `pre-line-live-2026-05-08` 已建立並推送到 GitHub。
+- 2026-05-08：`supabase_line_notifications.sql` 建置完成，用於新增 LINE 預約欄位與後台通知設定表。
+- 2026-05-08：採耳/陪讀兩組 LIFF access token 帶入、後端 token 驗證、店家通知、客戶確認通知、前一天提醒與 webhook routes 建置完成。
+- 2026-05-08：`/admin` 新增 LINE 客戶通知設定區塊，保留原有行事曆、休假管理與預約刪除流程。
+- 2026-05-08：`tsc --noEmit` 通過。
+- 2026-05-08：`next build` 通過，產出 `/api/line/sox/webhook`、`/api/line/reading/webhook`、`/api/line/reminders` 與 `/api/admin/line-settings`。
+- 2026-05-08：`next lint` 通過，無 ESLint warnings 或 errors；但指令已 deprecated。
 
 ## 下一步
 
-- 在 Vercel 匯入 GitHub repo，設定 Production env，完成首次 production deploy。
-- 針對前台、後台、預約送出、行事曆與休假管理做 production 實機驗收。
-- 網站穩定後再規劃 LINE LIFF、店家通知、客戶成功通知與前一天提醒。
+- 在 Supabase Production 執行 `supabase_line_notifications.sql`。
+- 在 Vercel Production 設定採耳/陪讀兩組 LINE env 與 `CRON_SECRET`。
+- 在 LINE Developers Console 建立兩個 LIFF app，設定採耳與陪讀 webhook URL。
+- 針對 LIFF 預約、店家通知、客戶確認通知、前一天提醒與後台開關做 production 實機驗收。
 - 評估是否將 lint script 從 `next lint` 遷移到 ESLint CLI。
 
 ## 回報格式

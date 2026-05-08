@@ -14,6 +14,10 @@ type Booking = {
   note: string | null;
   price: number | null;
   status: string;
+  line_user_id?: string | null;
+  line_display_name?: string | null;
+  line_confirmed_at?: string | null;
+  line_reminded_at?: string | null;
 };
 
 type BlockedSlot = {
@@ -30,6 +34,16 @@ type CalendarData = {
 type Message = {
   text: string;
   type?: "error" | "success";
+};
+
+type LineSetting = {
+  service: "sox" | "reading";
+  notify_customer_enabled: boolean;
+};
+
+const lineServiceLabels: Record<LineSetting["service"], string> = {
+  sox: "採耳",
+  reading: "陪讀",
 };
 
 function getMonthRange(monthValue: string) {
@@ -88,6 +102,10 @@ export function AdminPage() {
   const [blockStart, setBlockStart] = useState("");
   const [blockEnd, setBlockEnd] = useState("");
   const [blockReason, setBlockReason] = useState("");
+  const [lineSettings, setLineSettings] = useState<LineSetting[]>([]);
+  const [lineSettingsMessage, setLineSettingsMessage] = useState<Message>({
+    text: "",
+  });
 
   const calendarDays = useMemo(() => getCalendarDays(monthValue), [monthValue]);
   const monthLabel = useMemo(() => formatMonthLabel(monthValue), [monthValue]);
@@ -116,6 +134,7 @@ export function AdminPage() {
     setData(payload);
     setIsAuthed(true);
     setMessage({ text: "" });
+    await loadLineSettings();
   }
 
   useEffect(() => {
@@ -148,6 +167,68 @@ export function AdminPage() {
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST" });
     setIsAuthed(false);
+  }
+
+  async function loadLineSettings() {
+    const response = await fetch("/api/admin/line-settings");
+
+    if (response.status === 401) {
+      setIsAuthed(false);
+      return;
+    }
+
+    const payload = await response.json().catch(() => null) as {
+      settings?: LineSetting[];
+      warning?: string;
+      error?: string;
+    } | null;
+
+    if (!response.ok || !payload) {
+      setLineSettingsMessage({
+        text: payload?.error || "無法讀取 LINE 通知設定。",
+        type: "error",
+      });
+      return;
+    }
+
+    setLineSettings(payload.settings || []);
+    setLineSettingsMessage({
+      text: payload.warning || "",
+      type: payload.warning ? "error" : undefined,
+    });
+  }
+
+  async function updateLineSetting(service: LineSetting["service"], enabled: boolean) {
+    setIsLoading(true);
+    const response = await fetch("/api/admin/line-settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        service,
+        notify_customer_enabled: enabled,
+      }),
+    });
+    setIsLoading(false);
+    const payload = await response.json().catch(() => null) as {
+      error?: string;
+    } | null;
+
+    if (!response.ok) {
+      setLineSettingsMessage({
+        text: payload?.error || "更新 LINE 通知設定失敗。",
+        type: "error",
+      });
+      return;
+    }
+
+    setLineSettings((current) =>
+      current.map((setting) =>
+        setting.service === service
+          ? { ...setting, notify_customer_enabled: enabled }
+          : setting,
+      ),
+    );
+    setLineSettingsMessage({ text: "LINE 通知設定已更新。", type: "success" });
   }
 
   async function createBlockedSlot(event: FormEvent<HTMLFormElement>) {
@@ -374,6 +455,14 @@ export function AdminPage() {
                 <p>
                   NT$ {Number(booking.price || 0).toLocaleString("zh-TW")}
                 </p>
+                <p>
+                  LINE：
+                  {booking.line_user_id
+                    ? `已綁定${booking.line_display_name ? `（${booking.line_display_name}）` : ""}`
+                    : "未綁定"}
+                  ｜確認：{booking.line_confirmed_at ? "已通知" : "未通知"}
+                  ｜提醒：{booking.line_reminded_at ? "已通知" : "未通知"}
+                </p>
                 {booking.note ? <p className="note">{booking.note}</p> : null}
                 <div className="admin-card-actions">
                   <button
@@ -423,6 +512,34 @@ export function AdminPage() {
       </section>
 
       <section className="block-form-panel">
+        <div className="line-settings-panel">
+          <div>
+            <h2>LINE 通知設定</h2>
+            <p>店家新預約通知固定開啟；下方只控制客戶是否收到確認與前一天提醒。</p>
+          </div>
+          <div className="line-settings-list">
+            {lineSettings.map((setting) => (
+              <label className="line-toggle" key={setting.service}>
+                <span>
+                  <strong>{lineServiceLabels[setting.service]}</strong>
+                  客戶通知
+                </span>
+                <input
+                  checked={setting.notify_customer_enabled}
+                  disabled={isLoading}
+                  type="checkbox"
+                  onChange={(event) =>
+                    updateLineSetting(setting.service, event.target.checked)
+                  }
+                />
+              </label>
+            ))}
+          </div>
+          <div className={`admin-inline-message ${lineSettingsMessage.type || ""}`} role="status">
+            {lineSettingsMessage.text}
+          </div>
+        </div>
+
         <form className="block-form" onSubmit={createBlockedSlot}>
           <h2>新增休假</h2>
           <label>

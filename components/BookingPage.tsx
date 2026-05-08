@@ -14,6 +14,7 @@ import {
   isSlotAvailable,
   toDateValue,
 } from "@/lib/booking";
+import { useLineLiff } from "@/components/useLineLiff";
 
 type Message = {
   text: string;
@@ -73,6 +74,7 @@ export function BookingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmedBooking, setConfirmedBooking] =
     useState<ConfirmedBooking | null>(null);
+  const lineLiff = useLineLiff(process.env.NEXT_PUBLIC_SOX_LIFF_ID);
 
   const selectedService =
     EAR_SERVICES.find((service) => service.itemCode === serviceCode) ||
@@ -193,6 +195,7 @@ export function BookingPage() {
         customer_phone: customerPhone.trim(),
         note: note.trim() || null,
         price: selectedService.price,
+        line_access_token: lineLiff.accessToken,
       }),
     });
     const result = (await response.json().catch(() => null)) as {
@@ -406,6 +409,11 @@ export function BookingPage() {
             </div>
 
             <div className="grid">
+              <div className={`line-status wide ${lineLiff.status}`}>
+                <span>LINE 提醒</span>
+                <strong>{lineLiff.message}</strong>
+              </div>
+
               <label>
                 服務項目
                 <select
