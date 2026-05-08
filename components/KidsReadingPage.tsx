@@ -167,6 +167,12 @@ export function KidsReadingPage() {
 
     setConfirmedBooking(null);
 
+    if (isSlotInSelectedRange(slot)) {
+      setSelectedStart(null);
+      setSelectedEnd(null);
+      return;
+    }
+
     if (
       !selectedStart ||
       !selectedEnd ||
