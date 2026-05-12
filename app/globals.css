@@ -308,7 +308,7 @@ h1 {
 
 .service-gallery {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -349,7 +349,7 @@ h1 {
 }
 
 .service-body p {
-  min-height: 76px;
+  min-height: 108px;
   margin: 0;
   color: var(--muted);
   line-height: 1.65;

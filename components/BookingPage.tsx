@@ -31,34 +31,44 @@ type ConfirmedBooking = {
 const serviceDetails = {
   basic_ear_cleaning: {
     label: "基礎採耳",
-    image: "/images/basic-ear-cleaning.png",
-    description: "細緻清潔耳周與外耳，適合第一次體驗或日常保養。",
-    mood: "放鬆入門",
+    image: "/images/service-basic-ear-cleaning.png",
+    description: "輕柔整理耳周與外耳，適合初次體驗或日常快速保養。",
+    mood: "日常保養",
   },
-  deep_ear_care: {
-    label: "深層採耳保養",
-    image: "/images/deep-ear-care.png",
-    description: "拉長服務節奏，搭配更完整的耳部護理與舒緩流程。",
-    mood: "深度沉浸",
+  healing_ear_cleaning: {
+    label: "療癒採耳",
+    image: "/images/service-healing-ear-cleaning.png",
+    description:
+      "內視鏡探索、耳道清潔、耳道酥麻減壓、面部舒壓與耳穴按摩撥筋。",
+    mood: "舒壓療癒",
   },
-  ear_candle: {
-    label: "耳燭舒壓",
-    image: "/images/ear-candle-relax.png",
-    description: "柔和燈光與安靜氛圍，讓身體慢慢進入休息狀態。",
-    mood: "舒壓放空",
+  ear_bath_spa: {
+    label: "耳浴SPA",
+    image: "/images/service-ear-bath-spa.png",
+    description:
+      "暖流耳浴、面部肩頸精油紓壓、內視鏡探索、耳道清潔與耳穴按摩撥筋。",
+    mood: "暖流放鬆",
   },
-  consultation: {
-    label: "耳部諮詢",
-    image: "/images/ear-consultation.png",
-    description: "先了解狀況與需求，再安排適合的耳部保養方式。",
-    mood: "安心評估",
+  ear_candle_spa: {
+    label: "耳燭SPA",
+    image: "/images/service-ear-candle-spa.png",
+    description:
+      "薰香耳燭、頭肩頸精油舒壓、內視鏡探索、耳道清潔與耳穴按摩撥筋。",
+    mood: "耳燭舒壓",
+  },
+  premium_ear_spa_package: {
+    label: "享受套餐",
+    image: "/images/service-premium-package.png",
+    description:
+      "暖流耳浴、薰香耳燭、頭肩頸精油舒壓、內視鏡探索與耳道酥麻減壓。",
+    mood: "完整享受",
   },
 } as const;
 
 const journeySteps = [
   { title: "入店放鬆", text: "安靜空間、柔和燈光，先讓身體慢下來。" },
   { title: "確認需求", text: "依照當天狀況與喜好，安排適合的服務節奏。" },
-  { title: "細緻保養", text: "採耳、耳燭或深層護理都以舒適感為核心。" },
+  { title: "細緻保養", text: "採耳、耳浴與耳燭都以舒適感為核心。" },
 ];
 
 export function BookingPage() {
@@ -314,7 +324,7 @@ export function BookingPage() {
                 <h2>選一段適合今天的耳部保養</h2>
               </div>
               <p className="section-lead">
-                每個服務都有不同節奏。想初次體驗、深度放鬆，或安排耳燭舒壓，都可以直接從下方選擇。
+                每個服務都有不同節奏。想快速保養、深度放鬆，或安排耳浴與耳燭 SPA，都可以直接從下方選擇。
               </p>
             </div>
 
