@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   BusyRange,
   CLOSE_HOUR,
@@ -103,6 +103,7 @@ export function BookingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmedBooking, setConfirmedBooking] =
     useState<ConfirmedBooking | null>(null);
+  const successPanelRef = useRef<HTMLDivElement | null>(null);
   const lineLiff = useLineLiff(process.env.NEXT_PUBLIC_SOX_LIFF_ID);
   const officialLineUrl = process.env.NEXT_PUBLIC_SOX_LINE_ADD_FRIEND_URL || "";
 
@@ -160,6 +161,21 @@ export function BookingPage() {
 
     loadBusyRanges();
   }, [dateValue, serviceCode]);
+
+  useEffect(() => {
+    if (!confirmedBooking) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      successPanelRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [confirmedBooking]);
 
   const slots = useMemo(() => {
     if (!dateValue) {
@@ -575,7 +591,12 @@ export function BookingPage() {
               {message.text}
             </div>
             {confirmedBooking && (
-              <div className="success-panel" role="status" aria-live="polite">
+              <div
+                className="success-panel"
+                ref={successPanelRef}
+                role="status"
+                aria-live="polite"
+              >
                 <span>預約收到</span>
                 <strong>
                   {confirmedBooking.customerName
