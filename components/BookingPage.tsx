@@ -15,6 +15,7 @@ import {
   toDateValue,
 } from "@/lib/booking";
 import { useLineLiff } from "@/components/useLineLiff";
+import { getServicePreparationNotice } from "@/lib/serviceNotices";
 
 type Message = {
   text: string;
@@ -22,10 +23,14 @@ type Message = {
 };
 
 type ConfirmedBooking = {
+  itemCode: string;
   serviceName: string;
   start: Date;
   end: Date;
   customerName: string;
+  lineLinked: boolean;
+  lineDelivered: boolean;
+  lineNotificationEnabled: boolean;
 };
 
 const serviceDetails = {
@@ -71,6 +76,20 @@ const journeySteps = [
   { title: "細緻保養", text: "採耳、耳浴與耳燭都以舒適感為核心。" },
 ];
 
+function getLineSuccessMessage(booking: ConfirmedBooking) {
+  if (booking.lineLinked && booking.lineNotificationEnabled) {
+    return booking.lineDelivered
+      ? "已連結 LINE，預約確認訊息已送出，前一天 20:00 會再提醒你。"
+      : "已連結 LINE，預約前一天 20:00 會提醒你。";
+  }
+
+  if (booking.lineLinked) {
+    return "已連結 LINE，目前店家尚未開啟自動提醒。";
+  }
+
+  return "加入官方 LINE，有問題或特殊需求可以直接告訴我們。";
+}
+
 export function BookingPage() {
   const [serviceCode, setServiceCode] = useState(EAR_SERVICES[0].itemCode);
   const [dateValue, setDateValue] = useState("");
@@ -85,6 +104,7 @@ export function BookingPage() {
   const [confirmedBooking, setConfirmedBooking] =
     useState<ConfirmedBooking | null>(null);
   const lineLiff = useLineLiff(process.env.NEXT_PUBLIC_SOX_LIFF_ID);
+  const officialLineUrl = process.env.NEXT_PUBLIC_SOX_LINE_ADD_FRIEND_URL || "";
 
   const selectedService =
     EAR_SERVICES.find((service) => service.itemCode === serviceCode) ||
@@ -209,6 +229,11 @@ export function BookingPage() {
       }),
     });
     const result = (await response.json().catch(() => null)) as {
+      line?: {
+        customerLinked?: boolean;
+        customerDelivered?: boolean;
+        customerNotificationEnabled?: boolean;
+      };
       code?: string;
       error?: string;
     } | null;
@@ -230,10 +255,14 @@ export function BookingPage() {
     }
 
     setConfirmedBooking({
+      itemCode: selectedService.itemCode,
       serviceName: selectedService.name,
       start: selectedStart,
       end: selectedEnd,
       customerName: customerName.trim(),
+      lineLinked: Boolean(result.line?.customerLinked),
+      lineDelivered: Boolean(result.line?.customerDelivered),
+      lineNotificationEnabled: Boolean(result.line?.customerNotificationEnabled),
     });
     setMessage({ text: "預約已送出，我們已收到你的預約資料。", type: "success" });
     setCustomerName("");
@@ -558,7 +587,33 @@ export function BookingPage() {
                   {formatDateTime(confirmedBooking.start)}-
                   {formatTime(confirmedBooking.end)}
                 </p>
-                <p>請留意後續確認訊息，期待讓你舒服地放鬆一下。</p>
+                <div className="success-notice">
+                  <span>體驗前提醒</span>
+                  <p>{getServicePreparationNotice(confirmedBooking.itemCode)}</p>
+                </div>
+                <div
+                  className={`success-line ${
+                    confirmedBooking.lineLinked ? "linked" : ""
+                  }`}
+                >
+                  <span>LINE 提醒</span>
+                  <strong>{getLineSuccessMessage(confirmedBooking)}</strong>
+                  {!confirmedBooking.lineLinked && (
+                    <p>
+                      若下次從官方 LINE 預約入口完成預約，系統可綁定預約提醒。
+                    </p>
+                  )}
+                  {officialLineUrl && !confirmedBooking.lineLinked && (
+                    <a
+                      className="line-add-button"
+                      href={officialLineUrl}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      加入官方 LINE
+                    </a>
+                  )}
+                </div>
                 <a href="#location">查看店面位置</a>
               </div>
             )}

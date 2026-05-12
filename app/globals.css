@@ -684,11 +684,67 @@ textarea:focus {
   margin: 0;
 }
 
+.success-notice,
+.success-line {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.success-notice span,
+.success-line span {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.success-notice p {
+  color: var(--soft-ink);
+  white-space: pre-line;
+}
+
+.success-line {
+  border: 1px solid rgba(45, 111, 104, 0.16);
+}
+
+.success-line.linked {
+  background: rgba(45, 111, 104, 0.09);
+}
+
+.success-line strong {
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.success-line p {
+  color: var(--muted);
+}
+
 .success-panel a {
   width: fit-content;
   margin-top: 4px;
   color: var(--accent-strong);
   font-weight: 850;
+}
+
+.success-panel .line-add-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 46px;
+  margin-top: 8px;
+  border-radius: 6px;
+  background: #06c755;
+  color: #fff;
+  text-decoration: none;
+}
+
+.success-panel .line-add-button:hover {
+  background: #05ad4a;
 }
 
 .location {

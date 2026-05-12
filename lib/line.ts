@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { BUSINESS_TIMEZONE, SERVICES, formatDateTime, formatTime } from "@/lib/booking";
+import { getServicePreparationNotice } from "@/lib/serviceNotices";
 
 export type LineChannel = "sox" | "reading";
 
@@ -185,11 +186,9 @@ export function buildShopBookingText(booking: LineBookingMessageInput) {
 
 export function buildCustomerReminderText(booking: LineBookingMessageInput) {
   return [
-    "提醒你明天有襪子先生預約。",
+    getServicePreparationNotice(booking.itemCode),
     "",
-    `項目：${serviceName(booking.itemCode)}`,
     `時間：${formatDateTime(booking.startAt)}-${formatTime(booking.endAt)}`,
-    "若需調整時間，請提前聯繫店家。",
   ].join("\n");
 }
 

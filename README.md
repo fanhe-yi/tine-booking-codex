@@ -56,6 +56,7 @@ Recommended production hosting is Vercel Hobby with Supabase as the database.
    SOX_LINE_CHANNEL_ACCESS_TOKEN
    SOX_LINE_ADMIN_USER_ID
    NEXT_PUBLIC_SOX_LIFF_ID
+   NEXT_PUBLIC_SOX_LINE_ADD_FRIEND_URL
    READING_LINE_CHANNEL_ID
    READING_LINE_CHANNEL_SECRET
    READING_LINE_CHANNEL_ACCESS_TOKEN
@@ -94,3 +95,6 @@ Set Messaging API webhook URLs:
 
 Vercel Cron calls `/api/line/reminders` every day at 12:00 UTC, which is
 20:00 in Taipei. Set `CRON_SECRET` in Vercel before enabling the cron job.
+
+Set `NEXT_PUBLIC_SOX_LINE_ADD_FRIEND_URL` to the ear-cleaning official account
+add-friend URL, for example `https://line.me/R/ti/p/%40your-line-id`.

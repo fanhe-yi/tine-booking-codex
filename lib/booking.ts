@@ -24,7 +24,7 @@ export const EAR_SERVICES: ServiceItem[] = [
     itemCode: "basic_ear_cleaning",
     name: "基礎採耳",
     duration: 30,
-    price: 299,
+    price: 250,
   },
   {
     service: "sox",
