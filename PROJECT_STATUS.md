@@ -1,6 +1,6 @@
 # 專案監管紀錄
 
-更新日期：2026-05-13
+更新日期：2026-05-14
 
 ## 專案定位
 
@@ -29,18 +29,19 @@
 
 - `/kids-reading` 網址保留，前台文字由陪讀改為陪玩，LINE/LIFF 通道仍沿用 reading 設定。
 - 陪玩：1 小時 NT$300。
-- 小團互動課：每人 1 小時 NT$400，至少 3 人。
+- 小團互動課：每人 1 小時 NT$400，3-4 人成班。
 - 專屬才藝課：1 小時 NT$800，含材料費。
 - 陪玩預約營業時間：每日 15:00-21:00，整點時段，可連續選擇 1-6 小時。
 - 一般瀏覽器預約需填寶貝資料；LINE LIFF 進入可讀取既有寶貝資料或新增寶貝。
-- 寶貝資料欄位：年齡、性別、稱呼、地址、喜好、個性。
+- 寶貝資料必填欄位：年齡、性別、稱呼、個性；地址與喜好為選填。
+- 小團互動課需依人數提供每位寶貝資料，最多 4 位。
 
 ## 預約與 LINE 流程
 
 - 採耳頁預約成功後，頁面會顯示服務專屬事前告知、LINE 提醒狀態與店面位置入口。
 - 一般網頁預約可完成；未綁定 LINE 時，成功面板會顯示官方 LINE 加好友 CTA。
 - 從官方 LINE LIFF 入口預約並成功綁定 `line_user_id` 時，若後台 LINE 通知設定開啟，前一天 20:00 由 Vercel Cron 呼叫 `/api/line/reminders` 推播提醒。
-- 陪玩預約後端會依服務、時數與小團人數重新計價，不信任前端價格；店家 LINE 通知會包含家長資料、費用、寶貝資料與備註。
+- 陪玩預約後端會依服務、時數與小團人數重新計價，不信任前端價格；店家 LINE 通知會包含家長資料、費用、每位寶貝資料與備註。
 - Vercel Production 需設定 `NEXT_PUBLIC_SOX_LINE_ADD_FRIEND_URL`，成功面板才會顯示官方 LINE 加好友按鈕。
 
 ## 管理原則
@@ -60,7 +61,7 @@
 - LINE 串接前已建立 tag `pre-line-live-2026-05-08`，可回到 Vercel-only 上線版本。
 - `package.json` 仍使用 `next lint`；目前可執行，但 Next 提示此指令會在 Next.js 16 移除，後續應遷移到 ESLint CLI。
 - LINE 功能仍需在 Supabase Production 執行 `supabase_line_notifications.sql`，並於 Vercel/LINE Developers Console 設定兩組 channel 與 LIFF。
-- 陪玩寶貝建檔需在 Supabase Production 執行 `supabase_child_profiles.sql`；未執行前，既有寶貝列表與 `bookings.child_profile_id` 不會完整生效，但預約仍可把寶貝資料寫入 booking note。
+- 陪玩寶貝建檔需在 Supabase Production 執行 `supabase_child_profiles.sql`；此腳本包含 `child_profiles`、`booking_child_profiles` 與 `bookings.child_profile_id`，未執行前既有寶貝列表與多寶貝關聯不會完整生效，但預約仍可把寶貝資料寫入 booking note。
 - 2026-05-13 手動檢視時曾出現 `/kids-reading` CSS/JS 未正常載入的原生樣式畫面；需重啟 dev server、hard refresh，並檢查 `_next/static/css` 與 `_next/static/chunks` 是否 404。
 - 多個 Codex 視窗同時編輯同一專案時，若未先讀取本文件，容易沿用舊服務項目或舊流程判斷。
 
@@ -93,6 +94,12 @@
 - 2026-05-13：陪玩頁完成連續 1-6 小時選取、小團人數欄位、寶貝資料填寫、LINE 既有寶貝查詢 API 與 `supabase_child_profiles.sql`。
 - 2026-05-13：`/api/booking` 支援陪玩三項後端計價、寶貝資料摘要寫入 note、店家 LINE 通知附費用與寶貝資料。
 - 2026-05-13：`npm run build` 通過，`npx tsc --noEmit --pretty false` 通過；UI 驗收保留給使用者 Manual Test Checklist。
+- 2026-05-14：陪玩改版已建立基準 commit `841c67a Convert kids reading to play booking`。
+- 2026-05-14：小團互動課多位寶貝資料建置完成，commit `d56541d Support multiple children for group play bookings`。
+- 2026-05-14：小團互動課改為 3-4 位，前台可用 `+` 新增每位寶貝資料；陪玩與專屬才藝課維持單一寶貝。
+- 2026-05-14：寶貝資料必填欄位縮為年齡、性別、稱呼、個性，地址與喜好改選填；後端支援 `child_profile_ids` / `child_profiles` 多筆送出。
+- 2026-05-14：`supabase_child_profiles.sql` 延伸 `booking_child_profiles` 關聯表，保留 `bookings.child_profile_id` 作為相容欄位。
+- 2026-05-14：小團多寶貝版本 `npm run build` 通過，`npx tsc --noEmit --pretty false` 通過。
 
 ## 下一步
 
@@ -100,7 +107,7 @@
 - 確認 Vercel Production 已設定採耳/陪玩兩組 LINE env、`CRON_SECRET` 與 `NEXT_PUBLIC_SOX_LINE_ADD_FRIEND_URL`。
 - 在 LINE Developers Console 建立兩個 LIFF app，設定採耳與陪玩 webhook URL。
 - 針對 LIFF 預約、店家通知、客戶確認通知、前一天提醒與後台開關做 production 實機驗收。
-- 依 Manual Test Checklist 驗收陪玩頁：一般瀏覽器必填寶貝資料、LIFF 選既有寶貝、小團至少 3 人、三項服務計價、店家 LINE 通知內容。
+- 依 Manual Test Checklist 驗收陪玩頁：一般瀏覽器必填寶貝資料、LIFF 選既有寶貝、小團 3-4 位、多寶貝資料、三項服務計價、店家 LINE 通知內容。
 - 手機寬度驗收採耳預約成功後的事前告知區塊、官方 LINE CTA 與自動捲動位置。
 - 評估是否將 lint script 從 `next lint` 遷移到 ESLint CLI。
 
