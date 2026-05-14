@@ -6,7 +6,7 @@ alter table public.bookings
 
 create table if not exists public.child_profiles (
   id uuid primary key default gen_random_uuid(),
-  line_user_id text not null,
+  line_user_id text,
   line_display_name text,
   nickname text not null,
   age text not null,
@@ -22,6 +22,7 @@ create index if not exists child_profiles_line_user_idx
   on public.child_profiles (line_user_id, created_at);
 
 alter table public.child_profiles
+  alter column line_user_id drop not null,
   alter column address drop not null,
   alter column preferences drop not null;
 

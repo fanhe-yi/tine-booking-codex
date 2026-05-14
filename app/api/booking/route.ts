@@ -261,23 +261,25 @@ export async function POST(request: Request) {
 
       childProfileSummaries.push(formatChildProfileSummary(normalizedChildProfile));
 
-      if (lineProfile) {
-        const { data: insertedProfile, error: insertProfileError } = await supabase
-          .from("child_profiles")
-          .insert({
-            line_user_id: lineProfile.userId,
-            line_display_name: lineProfile.displayName,
-            ...normalizedChildProfile,
-          })
-          .select("id")
-          .single();
+      const { data: insertedProfile, error: insertProfileError } = await supabase
+        .from("child_profiles")
+        .insert({
+          line_user_id: lineProfile?.userId || null,
+          line_display_name: lineProfile?.displayName || null,
+          ...normalizedChildProfile,
+        })
+        .select("id")
+        .single();
 
-        if (insertProfileError) {
-          console.error("Unable to create child profile", insertProfileError);
-        } else {
-          childProfileIds.push(insertedProfile.id);
-        }
+      if (insertProfileError) {
+        console.error("Unable to create child profile", insertProfileError);
+        return NextResponse.json(
+          { error: "寶貝資料建立失敗，請稍後再試或聯繫店家。" },
+          { status: 500 },
+        );
       }
+
+      childProfileIds.push(insertedProfile.id);
     }
 
     childProfileId = childProfileIds[0] || null;
