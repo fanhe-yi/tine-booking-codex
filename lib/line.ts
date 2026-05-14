@@ -24,6 +24,7 @@ type LineBookingMessageInput = {
   customerName: string;
   customerPhone: string;
   note?: string | null;
+  price?: number | null;
 };
 
 export const defaultCustomerNotificationSettings: Record<LineChannel, boolean> = {
@@ -175,6 +176,7 @@ export function buildShopBookingText(booking: LineBookingMessageInput) {
     "",
     `項目：${serviceName(booking.itemCode)}`,
     `時間：${formatDateTime(booking.startAt)}-${formatTime(booking.endAt)}`,
+    booking.price ? `費用：NT$ ${booking.price.toLocaleString("zh-TW")}` : "",
     `姓名：${booking.customerName}`,
     `手機：${booking.customerPhone}`,
     booking.note?.trim() ? `備註：${booking.note.trim()}` : "備註：無",

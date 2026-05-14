@@ -43,7 +43,7 @@ type LineSetting = {
 
 const lineServiceLabels: Record<LineSetting["service"], string> = {
   sox: "採耳",
-  reading: "陪讀",
+  reading: "陪玩",
 };
 
 function getMonthRange(monthValue: string) {

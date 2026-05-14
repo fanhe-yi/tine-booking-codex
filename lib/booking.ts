@@ -56,17 +56,35 @@ export const EAR_SERVICES: ServiceItem[] = [
   },
 ];
 
-export const KIDS_READING_SERVICE: ServiceItem = {
-  service: "reading",
-  itemCode: "kids_reading",
-  name: "陪讀",
-  duration: 60,
-  price: 300,
-};
+export const KIDS_PLAY_SERVICES: ServiceItem[] = [
+  {
+    service: "reading",
+    itemCode: "kids_play",
+    name: "陪玩",
+    duration: 60,
+    price: 300,
+  },
+  {
+    service: "reading",
+    itemCode: "kids_group_class",
+    name: "小團互動課",
+    duration: 60,
+    price: 400,
+  },
+  {
+    service: "reading",
+    itemCode: "kids_talent_class",
+    name: "專屬才藝課",
+    duration: 60,
+    price: 800,
+  },
+];
+
+export const KIDS_READING_SERVICE: ServiceItem = KIDS_PLAY_SERVICES[0];
 
 export const SERVICES: ServiceItem[] = [
   ...EAR_SERVICES,
-  KIDS_READING_SERVICE,
+  ...KIDS_PLAY_SERVICES,
 ];
 
 export function pad(value: number) {

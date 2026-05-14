@@ -5,7 +5,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   BusyRange,
   CLOSE_HOUR,
-  KIDS_READING_SERVICE,
+  KIDS_PLAY_SERVICES,
   OPEN_HOUR,
   dateAtTaipeiTime,
   formatDateTime,
@@ -13,6 +13,12 @@ import {
   isSlotAvailable,
   toDateValue,
 } from "@/lib/booking";
+import {
+  ChildProfile,
+  ChildProfileInput,
+  isCompleteChildProfile,
+  normalizeChildProfile,
+} from "@/lib/childProfiles";
 import { useLineLiff } from "@/components/useLineLiff";
 
 type Message = {
@@ -21,22 +27,61 @@ type Message = {
 };
 
 type ConfirmedBooking = {
+  serviceName: string;
   start: Date;
   end: Date;
   customerName: string;
   price: number;
 };
 
-const service = KIDS_READING_SERVICE;
 const KIDS_SLOT_STEP_MINUTES = 60;
+const GROUP_CLASS_ITEM_CODE = "kids_group_class";
 
-const readingSteps = [
-  { title: "閱讀陪伴", text: "用溫柔節奏陪孩子看書、說故事，慢慢進入專注。" },
-  { title: "讀玩樂", text: "加入小遊戲、圖卡或積木，讓學習保有輕鬆感。" },
-  { title: "安靜練習", text: "依孩子當天狀態安排任務，保留休息與鼓勵。" },
+const serviceDetails: Record<
+  string,
+  { mood: string; description: string; priceLabel: string; imageAlt: string }
+> = {
+  kids_play: {
+    mood: "安心陪伴",
+    priceLabel: "1hr NT$ 300",
+    imageAlt: "溫馨陪玩與日常照顧情境",
+    description:
+      "陪伴遊戲與日常照顧，吃飯、泡奶、換尿布、協助如廁、午休、畫畫、聽故事、自由活動、陪讀功課、戶外走走、接送任務都可依需求調整。",
+  },
+  kids_group_class: {
+    mood: "三人成班",
+    priceLabel: "每人 1hr NT$ 400",
+    imageAlt: "小朋友一起互動遊戲與課程情境",
+    description:
+      "結合團體互動與客製課程，地點可由家長選擇，到府或指定場地皆可，讓孩子在交流中快樂成長。",
+  },
+  kids_talent_class: {
+    mood: "含材料費",
+    priceLabel: "1hr NT$ 800",
+    imageAlt: "兒童才藝課與創作活動情境",
+    description:
+      "依孩子年齡與興趣量身設計，美術、體能、感官遊戲、故事延伸等，邊玩邊學，激發創意與自信。",
+  },
+};
+
+const playSteps = [
+  { title: "確認需求", text: "先了解寶貝年齡、個性、喜好與照顧重點。" },
+  { title: "彈性安排", text: "依當天狀態安排遊戲、照顧、陪讀功課或戶外走走。" },
+  { title: "安心回報", text: "預約送出後，店家會收到完整需求並再確認細節。" },
 ];
 
+const emptyChildProfile = {
+  age: "",
+  gender: "",
+  nickname: "",
+  address: "",
+  preferences: "",
+  personality: "",
+};
+
 export function KidsReadingPage() {
+  const [serviceCode, setServiceCode] = useState(KIDS_PLAY_SERVICES[0].itemCode);
+  const [participantCount, setParticipantCount] = useState(3);
   const [dateValue, setDateValue] = useState("");
   const [busyRanges, setBusyRanges] = useState<BusyRange[]>([]);
   const [selectedStart, setSelectedStart] = useState<Date | null>(null);
@@ -44,11 +89,25 @@ export function KidsReadingPage() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [note, setNote] = useState("");
+  const [childProfiles, setChildProfiles] = useState<ChildProfile[]>([]);
+  const [selectedChildProfileId, setSelectedChildProfileId] = useState("new");
+  const [childProfile, setChildProfile] =
+    useState<ChildProfileInput>(emptyChildProfile);
   const [message, setMessage] = useState<Message>({ text: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmedBooking, setConfirmedBooking] =
     useState<ConfirmedBooking | null>(null);
   const lineLiff = useLineLiff(process.env.NEXT_PUBLIC_READING_LIFF_ID);
+
+  const selectedService =
+    KIDS_PLAY_SERVICES.find((service) => service.itemCode === serviceCode) ||
+    KIDS_PLAY_SERVICES[0];
+  const isGroupClass = selectedService.itemCode === GROUP_CLASS_ITEM_CODE;
+  const effectiveParticipantCount = isGroupClass ? participantCount : 1;
+  const selectedExistingChild = childProfiles.find(
+    (profile) => profile.id === selectedChildProfileId,
+  );
+  const needsChildProfileForm = !selectedExistingChild;
 
   useEffect(() => {
     const today = new Date();
@@ -97,6 +156,29 @@ export function KidsReadingPage() {
     loadBusyRanges();
   }, [dateValue]);
 
+  useEffect(() => {
+    async function loadChildProfiles() {
+      if (!lineLiff.accessToken) {
+        setChildProfiles([]);
+        setSelectedChildProfileId("new");
+        return;
+      }
+
+      const response = await fetch(
+        `/api/child-profiles?access_token=${encodeURIComponent(lineLiff.accessToken)}`,
+      );
+      const result = (await response.json().catch(() => null)) as {
+        childProfiles?: ChildProfile[];
+      } | null;
+      const profiles = result?.childProfiles || [];
+
+      setChildProfiles(profiles);
+      setSelectedChildProfileId(profiles[0]?.id || "new");
+    }
+
+    loadChildProfiles();
+  }, [lineLiff.accessToken]);
+
   const slots = useMemo(() => {
     if (!dateValue) {
       return [];
@@ -113,7 +195,7 @@ export function KidsReadingPage() {
       cursor = new Date(cursor.getTime() + KIDS_SLOT_STEP_MINUTES * 60 * 1000)
     ) {
       const start = new Date(cursor);
-      const end = new Date(start.getTime() + service.duration * 60000);
+      const end = new Date(start.getTime() + selectedService.duration * 60000);
 
       if (end > dayEnd) {
         continue;
@@ -122,12 +204,14 @@ export function KidsReadingPage() {
       output.push({
         start,
         end,
-        available: start > now && isSlotAvailable(start, end, service, busyRanges),
+        available:
+          start > now &&
+          isSlotAvailable(start, end, selectedService, busyRanges),
       });
     }
 
     return output;
-  }, [busyRanges, dateValue]);
+  }, [busyRanges, dateValue, selectedService]);
 
   const selectedHours =
     selectedStart && selectedEnd
@@ -139,7 +223,12 @@ export function KidsReadingPage() {
           ),
         )
       : 1;
-  const selectedPrice = selectedHours * service.price;
+  const selectedPrice =
+    selectedHours * selectedService.price * effectiveParticipantCount;
+
+  function updateChildProfile(field: keyof ChildProfileInput, value: string) {
+    setChildProfile((profile) => ({ ...profile, [field]: value }));
+  }
 
   function isSlotInSelectedRange(slot: { start: Date; end: Date }) {
     return (
@@ -195,22 +284,37 @@ export function KidsReadingPage() {
       return;
     }
 
+    if (isGroupClass && participantCount < 3) {
+      setMessage({ text: "小團互動課至少 3 人成班。", type: "error" });
+      return;
+    }
+
+    const normalizedChildProfile = normalizeChildProfile(childProfile);
+
+    if (needsChildProfileForm && !isCompleteChildProfile(normalizedChildProfile)) {
+      setMessage({ text: "請完整填寫寶貝資料。", type: "error" });
+      return;
+    }
+
     setIsSubmitting(true);
-    setMessage({ text: "正在送出陪讀預約..." });
+    setMessage({ text: "正在送出陪玩預約..." });
     setConfirmedBooking(null);
 
     const response = await fetch("/api/booking", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        service: service.service,
-        item_code: service.itemCode,
+        service: selectedService.service,
+        item_code: selectedService.itemCode,
         start_at: selectedStart.toISOString(),
         end_at: selectedEnd.toISOString(),
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
         note: note.trim() || null,
         price: selectedPrice,
+        participant_count: effectiveParticipantCount,
+        child_profile_id: selectedExistingChild?.id || null,
+        child_profile: needsChildProfileForm ? normalizedChildProfile : null,
         line_access_token: lineLiff.accessToken,
       }),
     });
@@ -222,12 +326,12 @@ export function KidsReadingPage() {
     setIsSubmitting(false);
 
     if (!response.ok || !result) {
-      console.error("Unable to submit kids reading booking", result);
+      console.error("Unable to submit kids play booking", result);
       setMessage({
         text:
           result?.code === "BOOKING_CONFLICT"
             ? "這個時段剛剛已被預約，請重新選擇。"
-            : "預約暫時無法送出，請稍後再試或直接聯繫店家。",
+            : result?.error || "預約暫時無法送出，請稍後再試或直接聯繫店家。",
         type: "error",
       });
       setSelectedStart(null);
@@ -236,15 +340,17 @@ export function KidsReadingPage() {
     }
 
     setConfirmedBooking({
+      serviceName: selectedService.name,
       start: selectedStart,
       end: selectedEnd,
       customerName: customerName.trim(),
       price: selectedPrice,
     });
-    setMessage({ text: "已收到陪讀預約，我們會再確認細節。", type: "success" });
+    setMessage({ text: "已收到陪玩預約，我們會再確認細節。", type: "success" });
     setCustomerName("");
     setCustomerPhone("");
     setNote("");
+    setChildProfile(emptyChildProfile);
     setSelectedStart(null);
     setSelectedEnd(null);
   }
@@ -255,14 +361,14 @@ export function KidsReadingPage() {
     <div className="kids-page">
       <header className="site-header">
         <nav className="nav" aria-label="主選單">
-          <a className="brand" href="#top" aria-label="襪子先生陪讀首頁">
+          <a className="brand" href="#top" aria-label="襪子先生陪玩首頁">
             <span className="mark" aria-hidden="true">
               襪
             </span>
             <span>襪子先生</span>
           </a>
           <div className="links">
-            <a href="#services">陪讀項目</a>
+            <a href="#services">陪玩項目</a>
             <a href="#space">陪伴方式</a>
             <a href="#booking">線上預約</a>
           </div>
@@ -273,51 +379,51 @@ export function KidsReadingPage() {
       </header>
 
       <main id="top">
-        <section className="hero" aria-label="襪子先生陪讀形象">
+        <section className="hero" aria-label="襪子先生陪玩形象">
           <Image
             className="hero-media"
             src="/images/kids-reading-hero.png"
-            alt="溫馨可愛的兒童陪讀空間"
+            alt="溫馨可愛的兒童陪玩空間"
             fill
             priority
             sizes="100vw"
           />
           <div className="hero-overlay" />
           <div className="hero-inner">
-            <p className="eyebrow">陪伴閱讀｜讀玩樂｜安靜練習</p>
-            <h1>襪子先生陪讀</h1>
+            <p className="eyebrow">陪伴遊戲｜日常照顧｜客製課程</p>
+            <h1>襪子先生陪玩</h1>
             <p className="hero-copy">
-              用溫柔陪伴與小小遊戲，讓孩子在放鬆的節奏裡閱讀、表達，也慢慢建立專注感。
+              讓孩子在安全感中快樂探索。陪玩、團體互動與才藝課都能依需求安排，時間可連續預約。
             </p>
             <div className="hero-actions">
               <a className="hero-cta" href="#booking">
-                預約陪讀時段
+                預約陪玩時段
               </a>
               <a className="ghost-cta" href="#services">
-                查看陪讀項目
+                查看陪玩項目
               </a>
             </div>
-            <div className="hero-strip" aria-label="陪讀重點">
+            <div className="hero-strip" aria-label="陪玩重點">
               <div className="hero-stat">
-                <strong>1 小時</strong>穩定陪伴節奏
+                <strong>陪玩照顧</strong>依需求彈性安排
               </div>
               <div className="hero-stat">
-                <strong>讀玩樂</strong>閱讀與遊戲並行
+                <strong>團體互動</strong>三人成班
               </div>
               <div className="hero-stat">
-                <strong>NT$ 300</strong>簡單好安排
+                <strong>才藝課</strong>含材料費
               </div>
             </div>
           </div>
         </section>
 
-        <section className="section intro-section" aria-label="陪讀介紹">
+        <section className="section intro-section" aria-label="陪玩介紹">
           <div>
-            <p className="section-kicker">A warm reading hour</p>
-            <h2>陪孩子讀一點、玩一點，也慢慢安定下來</h2>
+            <p className="section-kicker">A warm play care hour</p>
+            <h2>陪孩子玩一點、學一點，也被好好照顧</h2>
           </div>
           <p className="section-lead">
-            陪讀不是考試壓力，而是有人在旁邊穩穩陪著。從故事、圖卡到小遊戲，依孩子狀態安排一段舒服的學習時間。
+            第一次預約請留下寶貝年齡、稱呼、地址、喜好與個性。若已從 LINE 建檔，下次可直接選擇寶貝資料，店家會收到完整需求。
           </p>
         </section>
 
@@ -325,47 +431,52 @@ export function KidsReadingPage() {
           <div className="section">
             <div className="section-head">
               <div>
-                <p className="section-kicker">Service</p>
-                <h2>陪讀</h2>
+                <p className="section-kicker">Services</p>
+                <h2>陪玩服務項目</h2>
               </div>
               <p className="section-lead">
-                適合需要短時間陪伴閱讀、練習表達，或在遊戲中慢慢進入學習狀態的孩子。
+                可依孩子狀態選擇陪玩照顧、小團互動或專屬才藝課，所有項目都可連續預約多個小時。
               </p>
             </div>
 
-            <div className="service-gallery single-service">
-              <article className="service-tile">
-                <div className="service-image">
-                  <Image
-                    src="/images/kids-reading-service.png"
-                    alt="陪讀服務情境"
-                    fill
-                    sizes="(max-width: 920px) 100vw, 48vw"
-                  />
-                </div>
-                <div className="service-body">
-                  <span>溫馨陪伴</span>
-                  <h3>{service.name}</h3>
-                  <p>
-                    以閱讀、故事互動與簡單遊戲陪孩子度過一段穩定時間，讓學習變得輕鬆可親。
-                  </p>
-                  <div className="service-meta">
-                    <strong>{service.duration} 分鐘</strong>
-                    <strong>NT$ {service.price.toLocaleString("zh-TW")}</strong>
-                  </div>
-                  <button
-                    className="text-button"
-                    type="button"
-                    onClick={() =>
-                      document
-                        .getElementById("booking")
-                        ?.scrollIntoView({ behavior: "smooth" })
-                    }
-                  >
-                    預約這個時段
-                  </button>
-                </div>
-              </article>
+            <div className="service-gallery play-service-gallery">
+              {KIDS_PLAY_SERVICES.map((item) => {
+                const detail = serviceDetails[item.itemCode];
+
+                return (
+                  <article className="service-tile" key={item.itemCode}>
+                    <div className="service-image">
+                      <Image
+                        src="/images/kids-reading-service.png"
+                        alt={detail.imageAlt}
+                        fill
+                        sizes="(max-width: 920px) 100vw, 33vw"
+                      />
+                    </div>
+                    <div className="service-body">
+                      <span>{detail.mood}</span>
+                      <h3>{item.name}</h3>
+                      <p>{detail.description}</p>
+                      <div className="service-meta">
+                        <strong>{detail.priceLabel}</strong>
+                      </div>
+                      <button
+                        className="text-button"
+                        type="button"
+                        onClick={() => {
+                          setServiceCode(item.itemCode);
+                          setConfirmedBooking(null);
+                          document
+                            .getElementById("booking")
+                            ?.scrollIntoView({ behavior: "smooth" });
+                        }}
+                      >
+                        選這個項目
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -373,13 +484,13 @@ export function KidsReadingPage() {
         <section className="section space-section" id="space">
           <div className="space-copy">
             <p className="section-kicker">How it works</p>
-            <h2>讀書、遊戲與陪伴，安排在同一段安靜時間裡</h2>
+            <h2>遊戲、照顧與課程，安排在同一段安心時間裡</h2>
             <p>
-              每次陪讀都以孩子當天狀態為主，保留彈性與鼓勵。想安靜看書、練習表達，或加入一點玩樂，都可以在備註中告訴我們。
+              可以是吃飯泡奶、換尿布、協助如廁，也可以是畫畫、聽故事、戶外走走或陪讀功課。寶貝資料會協助店家更快掌握需求。
             </p>
           </div>
           <div className="journey-list">
-            {readingSteps.map((step, index) => (
+            {playSteps.map((step, index) => (
               <div className="journey-item" key={step.title}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
                 <div>
@@ -396,17 +507,17 @@ export function KidsReadingPage() {
             <div className="aside-photo">
               <Image
                 src="/images/kids-reading-service.png"
-                alt="陪讀預覽"
+                alt="陪玩預覽"
                 fill
                 sizes="(max-width: 920px) 100vw, 34vw"
               />
             </div>
             <div className="aside-note">
               <span>目前選擇</span>
-              <strong>{service.name}</strong>
+              <strong>{selectedService.name}</strong>
               <p>
-                {service.duration} 分鐘｜NT${" "}
-                {service.price.toLocaleString("zh-TW")}
+                {selectedHours} 小時｜NT${" "}
+                {selectedPrice.toLocaleString("zh-TW")}
               </p>
             </div>
           </aside>
@@ -416,7 +527,7 @@ export function KidsReadingPage() {
               <p className="section-kicker">Booking</p>
               <h2>線上預約</h2>
               <p className="hint">
-                可連續選擇多個陪讀時段，再留下聯絡方式。
+                選擇服務、日期與連續時段，再留下家長與寶貝資料。
               </p>
             </div>
 
@@ -428,7 +539,20 @@ export function KidsReadingPage() {
 
               <label>
                 預約項目
-                <input readOnly value={`${service.name}｜60 分｜NT$ 300`} />
+                <select
+                  value={serviceCode}
+                  onChange={(event) => {
+                    setServiceCode(event.target.value);
+                    setConfirmedBooking(null);
+                  }}
+                  required
+                >
+                  {KIDS_PLAY_SERVICES.map((item) => (
+                    <option key={item.itemCode} value={item.itemCode}>
+                      {item.name}｜{serviceDetails[item.itemCode].priceLabel}
+                    </option>
+                  ))}
+                </select>
               </label>
 
               <label>
@@ -447,6 +571,21 @@ export function KidsReadingPage() {
                 />
               </label>
 
+              {isGroupClass && (
+                <label>
+                  小團人數
+                  <input
+                    min={3}
+                    type="number"
+                    value={participantCount}
+                    onChange={(event) =>
+                      setParticipantCount(Number(event.target.value) || 3)
+                    }
+                    required
+                  />
+                </label>
+              )}
+
               <div className="wide">
                 <label>
                   可預約時段
@@ -454,9 +593,7 @@ export function KidsReadingPage() {
                     {slots.map((slot) => (
                       <button
                         className={`slot ${
-                          isSlotInSelectedRange(slot)
-                            ? "selected"
-                            : ""
+                          isSlotInSelectedRange(slot) ? "selected" : ""
                         }`}
                         disabled={!slot.available}
                         key={slot.start.toISOString()}
@@ -475,7 +612,7 @@ export function KidsReadingPage() {
               </div>
 
               <label>
-                姓名
+                家長姓名
                 <input
                   autoComplete="name"
                   placeholder="請輸入家長姓名"
@@ -497,10 +634,123 @@ export function KidsReadingPage() {
                 />
               </label>
 
+              <div className="wide child-profile-panel">
+                <div className="child-profile-head">
+                  <span>寶貝資料</span>
+                  <strong>
+                    {childProfiles.length
+                      ? "可選既有寶貝，或新增另一位"
+                      : "首次預約請完整填寫"}
+                  </strong>
+                </div>
+
+                {childProfiles.length > 0 && (
+                  <label>
+                    選擇寶貝
+                    <select
+                      value={selectedChildProfileId}
+                      onChange={(event) =>
+                        setSelectedChildProfileId(event.target.value)
+                      }
+                    >
+                      {childProfiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.nickname}｜{profile.address}
+                        </option>
+                      ))}
+                      <option value="new">新增寶貝資料</option>
+                    </select>
+                  </label>
+                )}
+
+                {selectedExistingChild && (
+                  <div className="child-profile-preview">
+                    <strong>{selectedExistingChild.nickname}</strong>
+                    <span>
+                      {selectedExistingChild.age}｜{selectedExistingChild.gender}
+                    </span>
+                    <p>{selectedExistingChild.address}</p>
+                    <p>喜好：{selectedExistingChild.preferences}</p>
+                    <p>個性：{selectedExistingChild.personality}</p>
+                  </div>
+                )}
+
+                {needsChildProfileForm && (
+                  <div className="child-profile-grid">
+                    <label>
+                      年齡
+                      <input
+                        placeholder="例如：3 歲"
+                        value={childProfile.age}
+                        onChange={(event) =>
+                          updateChildProfile("age", event.target.value)
+                        }
+                        required
+                      />
+                    </label>
+                    <label>
+                      性別
+                      <input
+                        placeholder="例如：女 / 男"
+                        value={childProfile.gender}
+                        onChange={(event) =>
+                          updateChildProfile("gender", event.target.value)
+                        }
+                        required
+                      />
+                    </label>
+                    <label>
+                      稱呼（暱稱）
+                      <input
+                        placeholder="寶貝平常怎麼稱呼"
+                        value={childProfile.nickname}
+                        onChange={(event) =>
+                          updateChildProfile("nickname", event.target.value)
+                        }
+                        required
+                      />
+                    </label>
+                    <label>
+                      地址
+                      <input
+                        placeholder="到府或指定場地地址"
+                        value={childProfile.address}
+                        onChange={(event) =>
+                          updateChildProfile("address", event.target.value)
+                        }
+                        required
+                      />
+                    </label>
+                    <label>
+                      喜好
+                      <input
+                        placeholder="動物、樂高、卡通等等"
+                        value={childProfile.preferences}
+                        onChange={(event) =>
+                          updateChildProfile("preferences", event.target.value)
+                        }
+                        required
+                      />
+                    </label>
+                    <label>
+                      個性
+                      <input
+                        placeholder="外向、怕生、慢熟等等"
+                        value={childProfile.personality}
+                        onChange={(event) =>
+                          updateChildProfile("personality", event.target.value)
+                        }
+                        required
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+
               <label className="wide">
                 備註
                 <textarea
-                  placeholder="可填寫孩子年齡、閱讀需求，或不方便的時間"
+                  placeholder="可填寫接送任務、午休、泡奶、功課或其他照顧需求"
                   value={note}
                   onChange={(event) => setNote(event.target.value)}
                 />
@@ -512,9 +762,9 @@ export function KidsReadingPage() {
                 預約內容
                 <strong>
                   {selectedStart && selectedEnd
-                    ? `${service.name}，${formatDateTime(selectedStart)}-${formatTime(
-                        selectedEnd,
-                      )}`
+                    ? `${selectedService.name}，${formatDateTime(
+                        selectedStart,
+                      )}-${formatTime(selectedEnd)}`
                     : "尚未選擇時段"}
                 </strong>
               </div>
@@ -532,18 +782,19 @@ export function KidsReadingPage() {
             </div>
             {confirmedBooking && (
               <div className="success-panel" role="status" aria-live="polite">
-                <span>陪讀預約收到</span>
+                <span>陪玩預約收到</span>
                 <strong>
                   {confirmedBooking.customerName
-                    ? `${confirmedBooking.customerName}，已收到你的陪讀預約`
-                    : "已收到你的陪讀預約"}
+                    ? `${confirmedBooking.customerName}，已收到你的陪玩預約`
+                    : "已收到你的陪玩預約"}
                 </strong>
                 <p>
-                  {service.name}｜{formatDateTime(confirmedBooking.start)}-
+                  {confirmedBooking.serviceName}｜
+                  {formatDateTime(confirmedBooking.start)}-
                   {formatTime(confirmedBooking.end)}
                 </p>
                 <p>費用 NT$ {confirmedBooking.price.toLocaleString("zh-TW")}</p>
-                <p>請留意後續確認訊息，我們會一起安排適合孩子的陪讀節奏。</p>
+                <p>請留意後續確認訊息，我們會一起安排適合寶貝的陪玩節奏。</p>
               </div>
             )}
           </form>
@@ -551,7 +802,7 @@ export function KidsReadingPage() {
       </main>
 
       <footer className="footer">
-        <span>襪子先生｜陪讀預約</span>
+        <span>襪子先生｜陪玩預約</span>
         <span>
           designed by{" "}
           <a href="https://www.chen-yi.tw" rel="noreferrer" target="_blank">

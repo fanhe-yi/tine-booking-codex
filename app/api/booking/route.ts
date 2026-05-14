@@ -2,10 +2,17 @@ import { NextResponse } from "next/server";
 import {
   BUSINESS_TIMEZONE,
   CLOSE_HOUR,
-  KIDS_READING_SERVICE,
+  KIDS_PLAY_SERVICES,
   OPEN_HOUR,
   SERVICES,
 } from "@/lib/booking";
+import {
+  type ChildProfile,
+  type ChildProfileInput,
+  formatChildProfileSummary,
+  isCompleteChildProfile,
+  normalizeChildProfile,
+} from "@/lib/childProfiles";
 import {
   buildCustomerConfirmationText,
   buildShopBookingText,
@@ -18,6 +25,11 @@ import {
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 
 type SupabaseClient = ReturnType<typeof createServiceSupabaseClient>;
+
+const KIDS_GROUP_CLASS_ITEM_CODE = "kids_group_class";
+const kidsPlayItemCodes = new Set(
+  KIDS_PLAY_SERVICES.map((service) => service.itemCode),
+);
 
 function taipeiParts(date: Date) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -71,6 +83,9 @@ export async function POST(request: Request) {
     customer_phone?: string;
     note?: string | null;
     price?: number;
+    participant_count?: number;
+    child_profile_id?: string | null;
+    child_profile?: Partial<ChildProfileInput> | null;
     line_access_token?: string | null;
   } | null;
 
@@ -98,15 +113,18 @@ export async function POST(request: Request) {
 
   const durationMs = end.getTime() - start.getTime();
   const hourMs = 60 * 60 * 1000;
-  const isKidsReading =
-    selectedService.itemCode === KIDS_READING_SERVICE.itemCode;
+  const isKidsPlay = kidsPlayItemCodes.has(selectedService.itemCode);
+  const isKidsGroupClass = selectedService.itemCode === KIDS_GROUP_CLASS_ITEM_CODE;
+  const participantCount = isKidsGroupClass
+    ? Math.trunc(Number(body.participant_count))
+    : 1;
   let bookingPrice = selectedService.price;
 
   if (durationMs <= 0) {
     return NextResponse.json({ error: "預約時間不正確。" }, { status: 400 });
   }
 
-  if (isKidsReading) {
+  if (isKidsPlay) {
     const startParts = taipeiParts(start);
     const endParts = taipeiParts(end);
     const isSameTaipeiDate =
@@ -121,6 +139,13 @@ export async function POST(request: Request) {
     const isWholeHour = durationMs % hourMs === 0;
     const hours = durationMs / hourMs;
 
+    if (isKidsGroupClass && (!Number.isFinite(participantCount) || participantCount < 3)) {
+      return NextResponse.json(
+        { error: "小團互動課至少需要 3 人。" },
+        { status: 400 },
+      );
+    }
+
     if (
       !isSameTaipeiDate ||
       !isWithinBusinessHours ||
@@ -131,7 +156,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "預約時間不正確。" }, { status: 400 });
     }
 
-    bookingPrice = hours * selectedService.price;
+    bookingPrice = hours * selectedService.price * participantCount;
   } else if (durationMs !== selectedService.duration * 60 * 1000) {
     return NextResponse.json({ error: "預約時間不正確。" }, { status: 400 });
   }
@@ -145,6 +170,69 @@ export async function POST(request: Request) {
   const lineProfile = body.line_access_token
     ? await verifyLiffAccessToken(body.line_access_token, lineChannel)
     : null;
+  let childProfileId: string | null = null;
+  let childProfileSummary = "";
+
+  if (isKidsPlay) {
+    if (body.child_profile_id && lineProfile) {
+      const { data: existingProfile, error: profileError } = await supabase
+        .from("child_profiles")
+        .select("id,age,gender,nickname,address,preferences,personality")
+        .eq("id", body.child_profile_id)
+        .eq("line_user_id", lineProfile.userId)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error("Unable to load selected child profile", profileError);
+      }
+
+      if (!existingProfile) {
+        return NextResponse.json(
+          { error: "寶貝資料不正確，請重新選擇或新增。" },
+          { status: 400 },
+        );
+      }
+
+      childProfileId = existingProfile.id;
+      childProfileSummary = formatChildProfileSummary(existingProfile as ChildProfile);
+    } else {
+      const normalizedChildProfile = normalizeChildProfile(body.child_profile || null);
+
+      if (!isCompleteChildProfile(normalizedChildProfile)) {
+        return NextResponse.json(
+          { error: "請完整填寫寶貝資料。" },
+          { status: 400 },
+        );
+      }
+
+      childProfileSummary = formatChildProfileSummary(normalizedChildProfile);
+
+      if (lineProfile) {
+        const { data: insertedProfile, error: insertProfileError } = await supabase
+          .from("child_profiles")
+          .insert({
+            line_user_id: lineProfile.userId,
+            line_display_name: lineProfile.displayName,
+            ...normalizedChildProfile,
+          })
+          .select("id")
+          .single();
+
+        if (insertProfileError) {
+          console.error("Unable to create child profile", insertProfileError);
+        } else {
+          childProfileId = insertedProfile.id;
+        }
+      }
+    }
+  }
+
+  const noteSections = [
+    body.note?.trim() ? `家長備註：${body.note.trim()}` : "",
+    isKidsGroupClass ? `小團人數：${participantCount} 人` : "",
+    childProfileSummary ? `寶貝資料：\n${childProfileSummary}` : "",
+  ].filter(Boolean);
+  const bookingNote = noteSections.length ? noteSections.join("\n\n") : null;
   const bookingPayload = {
     service: selectedService.service,
     item_code: selectedService.itemCode,
@@ -152,9 +240,10 @@ export async function POST(request: Request) {
     end_at: end.toISOString(),
     customer_name: body.customer_name.trim(),
     customer_phone: body.customer_phone.trim(),
-    note: body.note?.trim() || null,
+    note: bookingNote,
     price: bookingPrice,
     status: "confirmed",
+    ...(childProfileId ? { child_profile_id: childProfileId } : {}),
     ...(lineProfile
       ? {
           line_user_id: lineProfile.userId,
@@ -166,10 +255,13 @@ export async function POST(request: Request) {
   let { data, error } = await supabase
     .from("bookings")
     .insert(bookingPayload)
-    .select("id,item_code,start_at,end_at,customer_name,customer_phone,note")
+    .select("id,item_code,start_at,end_at,customer_name,customer_phone,note,price")
     .single();
 
-  if (error && lineProfile && error.message.includes("line_")) {
+  if (
+    error &&
+    (error.message.includes("line_") || error.message.includes("child_profile_id"))
+  ) {
     const retryPayload = {
       service: selectedService.service,
       item_code: selectedService.itemCode,
@@ -177,14 +269,14 @@ export async function POST(request: Request) {
       end_at: end.toISOString(),
       customer_name: body.customer_name.trim(),
       customer_phone: body.customer_phone.trim(),
-      note: body.note?.trim() || null,
+      note: bookingNote,
       price: bookingPrice,
       status: "confirmed",
     };
     const retry = await supabase
       .from("bookings")
       .insert(retryPayload)
-      .select("id,item_code,start_at,end_at,customer_name,customer_phone,note")
+      .select("id,item_code,start_at,end_at,customer_name,customer_phone,note,price")
       .single();
 
     data = retry.data;
@@ -229,6 +321,7 @@ export async function POST(request: Request) {
       customerName: data.customer_name,
       customerPhone: data.customer_phone,
       note: data.note,
+      price: data.price,
     }),
   );
   const notifyCustomer = await getNotifyCustomerEnabled(supabase, lineChannel);
@@ -245,6 +338,7 @@ export async function POST(request: Request) {
             customerName: data.customer_name,
             customerPhone: data.customer_phone,
             note: data.note,
+            price: data.price,
           }),
         )
       : Promise.resolve({

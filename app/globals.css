@@ -316,6 +316,10 @@ h1 {
   grid-template-columns: minmax(0, 760px);
 }
 
+.play-service-gallery {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .service-tile {
   overflow: hidden;
   border: 1px solid rgba(223, 208, 192, 0.95);
@@ -565,6 +569,58 @@ textarea:focus {
 .line-status.error {
   border-color: rgba(163, 61, 45, 0.24);
   background: #fff4ef;
+}
+
+.child-profile-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff8ee;
+}
+
+.child-profile-head {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.child-profile-head span {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.child-profile-head strong {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.child-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.child-profile-preview {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid rgba(45, 111, 104, 0.18);
+  border-radius: 8px;
+  background: #eef7f3;
+  color: var(--soft-ink);
+  line-height: 1.55;
+}
+
+.child-profile-preview strong {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.child-profile-preview p {
+  margin: 0;
 }
 
 .slots {

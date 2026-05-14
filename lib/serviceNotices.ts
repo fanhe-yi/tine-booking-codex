@@ -51,11 +51,23 @@ export const SERVICE_PREPARATION_NOTICES: Record<string, string> = {
     "",
     "🌿如果有任何問題或特殊需求，隨時透過官方賴跟我說✨",
   ].join("\n"),
+  kids_play: [
+    "襪子先生已收到陪玩預約。",
+    "請留意後續確認訊息，也可以先透過官方 LINE 補充寶貝當天需要協助的事項。",
+  ].join("\n"),
+  kids_group_class: [
+    "襪子先生已收到小團互動課預約。",
+    "請留意後續確認訊息；若人數、地點或課程方向有調整，也可以先透過官方 LINE 告知。",
+  ].join("\n"),
+  kids_talent_class: [
+    "襪子先生已收到專屬才藝課預約。",
+    "請留意後續確認訊息；若寶貝有特別喜歡的主題或材料需求，也可以先透過官方 LINE 告知。",
+  ].join("\n"),
 };
 
 export function getServicePreparationNotice(itemCode: string) {
   return (
     SERVICE_PREPARATION_NOTICES[itemCode] ||
-    "若有耳部手術史、近期不適或特殊需求，請提前透過官方 LINE 告知。"
+    "若有特殊需求，請提前透過官方 LINE 告知。"
   );
 }
