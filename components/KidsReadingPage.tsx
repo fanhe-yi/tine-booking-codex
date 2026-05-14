@@ -34,8 +34,16 @@ type ConfirmedBooking = {
   price: number;
 };
 
+type ChildProfileEntry = {
+  key: string;
+  selectedId: string;
+  profile: ChildProfileInput;
+};
+
 const KIDS_SLOT_STEP_MINUTES = 60;
 const GROUP_CLASS_ITEM_CODE = "kids_group_class";
+const MIN_GROUP_PARTICIPANTS = 3;
+const MAX_GROUP_PARTICIPANTS = 4;
 
 const serviceDetails: Record<
   string,
@@ -79,6 +87,17 @@ const emptyChildProfile = {
   personality: "",
 };
 
+function createChildProfileEntry(): ChildProfileEntry {
+  return {
+    key:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`,
+    selectedId: "new",
+    profile: { ...emptyChildProfile },
+  };
+}
+
 export function KidsReadingPage() {
   const [serviceCode, setServiceCode] = useState(KIDS_PLAY_SERVICES[0].itemCode);
   const [participantCount, setParticipantCount] = useState(3);
@@ -90,9 +109,9 @@ export function KidsReadingPage() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [note, setNote] = useState("");
   const [childProfiles, setChildProfiles] = useState<ChildProfile[]>([]);
-  const [selectedChildProfileId, setSelectedChildProfileId] = useState("new");
-  const [childProfile, setChildProfile] =
-    useState<ChildProfileInput>(emptyChildProfile);
+  const [childProfileEntries, setChildProfileEntries] = useState<
+    ChildProfileEntry[]
+  >(() => [createChildProfileEntry()]);
   const [message, setMessage] = useState<Message>({ text: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmedBooking, setConfirmedBooking] =
@@ -104,10 +123,10 @@ export function KidsReadingPage() {
     KIDS_PLAY_SERVICES[0];
   const isGroupClass = selectedService.itemCode === GROUP_CLASS_ITEM_CODE;
   const effectiveParticipantCount = isGroupClass ? participantCount : 1;
-  const selectedExistingChild = childProfiles.find(
-    (profile) => profile.id === selectedChildProfileId,
+  const visibleChildEntries = childProfileEntries.slice(
+    0,
+    effectiveParticipantCount,
   );
-  const needsChildProfileForm = !selectedExistingChild;
 
   useEffect(() => {
     const today = new Date();
@@ -160,7 +179,9 @@ export function KidsReadingPage() {
     async function loadChildProfiles() {
       if (!lineLiff.accessToken) {
         setChildProfiles([]);
-        setSelectedChildProfileId("new");
+        setChildProfileEntries((entries) =>
+          entries.map((entry) => ({ ...entry, selectedId: "new" })),
+        );
         return;
       }
 
@@ -173,11 +194,27 @@ export function KidsReadingPage() {
       const profiles = result?.childProfiles || [];
 
       setChildProfiles(profiles);
-      setSelectedChildProfileId(profiles[0]?.id || "new");
+      setChildProfileEntries((entries) =>
+        entries.map((entry, index) => ({
+          ...entry,
+          selectedId: index === 0 ? profiles[0]?.id || "new" : entry.selectedId,
+        })),
+      );
     }
 
     loadChildProfiles();
   }, [lineLiff.accessToken]);
+
+  useEffect(() => {
+    if (!isGroupClass && childProfileEntries.length > 1) {
+      setChildProfileEntries((entries) => entries.slice(0, 1));
+      return;
+    }
+
+    if (isGroupClass && childProfileEntries.length > participantCount) {
+      setChildProfileEntries((entries) => entries.slice(0, participantCount));
+    }
+  }, [childProfileEntries.length, isGroupClass, participantCount]);
 
   const slots = useMemo(() => {
     if (!dateValue) {
@@ -226,8 +263,48 @@ export function KidsReadingPage() {
   const selectedPrice =
     selectedHours * selectedService.price * effectiveParticipantCount;
 
-  function updateChildProfile(field: keyof ChildProfileInput, value: string) {
-    setChildProfile((profile) => ({ ...profile, [field]: value }));
+  function updateChildProfile(
+    entryKey: string,
+    field: keyof ChildProfileInput,
+    value: string,
+  ) {
+    setChildProfileEntries((entries) =>
+      entries.map((entry) =>
+        entry.key === entryKey
+          ? { ...entry, profile: { ...entry.profile, [field]: value } }
+          : entry,
+      ),
+    );
+  }
+
+  function updateChildProfileSelection(entryKey: string, selectedId: string) {
+    setChildProfileEntries((entries) =>
+      entries.map((entry) =>
+        entry.key === entryKey ? { ...entry, selectedId } : entry,
+      ),
+    );
+  }
+
+  function addChildProfileEntry() {
+    if (childProfileEntries.length >= MAX_GROUP_PARTICIPANTS) {
+      return;
+    }
+
+    setChildProfileEntries((entries) => [...entries, createChildProfileEntry()]);
+  }
+
+  function removeChildProfileEntry(entryKey: string) {
+    if (childProfileEntries.length <= 1) {
+      return;
+    }
+
+    setChildProfileEntries((entries) =>
+      entries.filter((entry) => entry.key !== entryKey),
+    );
+  }
+
+  function findExistingChild(entry: ChildProfileEntry) {
+    return childProfiles.find((profile) => profile.id === entry.selectedId) || null;
   }
 
   function isSlotInSelectedRange(slot: { start: Date; end: Date }) {
@@ -284,16 +361,49 @@ export function KidsReadingPage() {
       return;
     }
 
-    if (isGroupClass && participantCount < 3) {
-      setMessage({ text: "小團互動課至少 3 人成班。", type: "error" });
+    if (
+      isGroupClass &&
+      (participantCount < MIN_GROUP_PARTICIPANTS ||
+        participantCount > MAX_GROUP_PARTICIPANTS)
+    ) {
+      setMessage({ text: "小團互動課人數需為 3-4 位。", type: "error" });
       return;
     }
 
-    const normalizedChildProfile = normalizeChildProfile(childProfile);
+    const entriesForSubmit = isGroupClass
+      ? childProfileEntries.slice(0, participantCount)
+      : childProfileEntries.slice(0, 1);
 
-    if (needsChildProfileForm && !isCompleteChildProfile(normalizedChildProfile)) {
-      setMessage({ text: "請完整填寫寶貝資料。", type: "error" });
+    if (isGroupClass && entriesForSubmit.length !== participantCount) {
+      setMessage({
+        text: `請新增 ${participantCount} 位寶貝資料。`,
+        type: "error",
+      });
       return;
+    }
+
+    const childProfileIds: string[] = [];
+    const childProfilesForSubmit: ChildProfileInput[] = [];
+
+    for (const entry of entriesForSubmit) {
+      const existingChild = findExistingChild(entry);
+
+      if (existingChild) {
+        childProfileIds.push(existingChild.id);
+        continue;
+      }
+
+      const normalizedChildProfile = normalizeChildProfile(entry.profile);
+
+      if (!isCompleteChildProfile(normalizedChildProfile)) {
+        setMessage({
+          text: "請完整填寫每位寶貝的年齡、性別、稱呼與個性。",
+          type: "error",
+        });
+        return;
+      }
+
+      childProfilesForSubmit.push(normalizedChildProfile);
     }
 
     setIsSubmitting(true);
@@ -313,8 +423,10 @@ export function KidsReadingPage() {
         note: note.trim() || null,
         price: selectedPrice,
         participant_count: effectiveParticipantCount,
-        child_profile_id: selectedExistingChild?.id || null,
-        child_profile: needsChildProfileForm ? normalizedChildProfile : null,
+        child_profile_ids: childProfileIds,
+        child_profiles: childProfilesForSubmit,
+        child_profile_id: childProfileIds[0] || null,
+        child_profile: childProfilesForSubmit[0] || null,
         line_access_token: lineLiff.accessToken,
       }),
     });
@@ -350,7 +462,7 @@ export function KidsReadingPage() {
     setCustomerName("");
     setCustomerPhone("");
     setNote("");
-    setChildProfile(emptyChildProfile);
+    setChildProfileEntries([createChildProfileEntry()]);
     setSelectedStart(null);
     setSelectedEnd(null);
   }
@@ -423,7 +535,7 @@ export function KidsReadingPage() {
             <h2>陪孩子玩一點、學一點，也被好好照顧</h2>
           </div>
           <p className="section-lead">
-            第一次預約請留下寶貝年齡、稱呼、地址、喜好與個性。若已從 LINE 建檔，下次可直接選擇寶貝資料，店家會收到完整需求。
+            第一次預約請留下寶貝年齡、性別、稱呼與個性。若已從 LINE 建檔，下次可直接選擇寶貝資料，店家會收到完整需求。
           </p>
         </section>
 
@@ -543,6 +655,7 @@ export function KidsReadingPage() {
                   value={serviceCode}
                   onChange={(event) => {
                     setServiceCode(event.target.value);
+                    setChildProfileEntries((entries) => entries.slice(0, 1));
                     setConfirmedBooking(null);
                   }}
                   required
@@ -575,12 +688,21 @@ export function KidsReadingPage() {
                 <label>
                   小團人數
                   <input
-                    min={3}
+                    max={MAX_GROUP_PARTICIPANTS}
+                    min={MIN_GROUP_PARTICIPANTS}
                     type="number"
                     value={participantCount}
-                    onChange={(event) =>
-                      setParticipantCount(Number(event.target.value) || 3)
-                    }
+                    onChange={(event) => {
+                      const nextValue = Number(event.target.value);
+                      const nextCount = Number.isFinite(nextValue)
+                        ? Math.min(
+                            MAX_GROUP_PARTICIPANTS,
+                            Math.max(MIN_GROUP_PARTICIPANTS, nextValue),
+                          )
+                        : MIN_GROUP_PARTICIPANTS;
+
+                      setParticipantCount(nextCount);
+                    }}
                     required
                   />
                 </label>
@@ -636,115 +758,185 @@ export function KidsReadingPage() {
 
               <div className="wide child-profile-panel">
                 <div className="child-profile-head">
-                  <span>寶貝資料</span>
-                  <strong>
-                    {childProfiles.length
-                      ? "可選既有寶貝，或新增另一位"
-                      : "首次預約請完整填寫"}
-                  </strong>
+                  <div>
+                    <span>寶貝資料</span>
+                    <strong>
+                      {isGroupClass
+                        ? `小團需填 ${participantCount} 位寶貝`
+                        : childProfiles.length
+                          ? "可選既有寶貝，或新增另一位"
+                          : "首次預約請完整填寫"}
+                    </strong>
+                  </div>
+                  {isGroupClass && (
+                    <button
+                      className="add-child-button"
+                      disabled={childProfileEntries.length >= participantCount}
+                      type="button"
+                      onClick={addChildProfileEntry}
+                      aria-label="新增一位寶貝"
+                    >
+                      +
+                    </button>
+                  )}
                 </div>
 
-                {childProfiles.length > 0 && (
-                  <label>
-                    選擇寶貝
-                    <select
-                      value={selectedChildProfileId}
-                      onChange={(event) =>
-                        setSelectedChildProfileId(event.target.value)
-                      }
-                    >
-                      {childProfiles.map((profile) => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.nickname}｜{profile.address}
-                        </option>
-                      ))}
-                      <option value="new">新增寶貝資料</option>
-                    </select>
-                  </label>
-                )}
+                <div className="child-profile-list">
+                  {visibleChildEntries.map((entry, index) => {
+                    const selectedExistingChild = findExistingChild(entry);
+                    const needsChildProfileForm = !selectedExistingChild;
 
-                {selectedExistingChild && (
-                  <div className="child-profile-preview">
-                    <strong>{selectedExistingChild.nickname}</strong>
-                    <span>
-                      {selectedExistingChild.age}｜{selectedExistingChild.gender}
-                    </span>
-                    <p>{selectedExistingChild.address}</p>
-                    <p>喜好：{selectedExistingChild.preferences}</p>
-                    <p>個性：{selectedExistingChild.personality}</p>
-                  </div>
-                )}
+                    return (
+                      <div className="child-profile-card" key={entry.key}>
+                        <div className="child-profile-card-head">
+                          <strong>寶貝 {index + 1}</strong>
+                          {isGroupClass && childProfileEntries.length > 1 && (
+                            <button
+                              className="remove-child-button"
+                              type="button"
+                              onClick={() => removeChildProfileEntry(entry.key)}
+                            >
+                              移除
+                            </button>
+                          )}
+                        </div>
 
-                {needsChildProfileForm && (
-                  <div className="child-profile-grid">
-                    <label>
-                      年齡
-                      <input
-                        placeholder="例如：3 歲"
-                        value={childProfile.age}
-                        onChange={(event) =>
-                          updateChildProfile("age", event.target.value)
-                        }
-                        required
-                      />
-                    </label>
-                    <label>
-                      性別
-                      <input
-                        placeholder="例如：女 / 男"
-                        value={childProfile.gender}
-                        onChange={(event) =>
-                          updateChildProfile("gender", event.target.value)
-                        }
-                        required
-                      />
-                    </label>
-                    <label>
-                      稱呼（暱稱）
-                      <input
-                        placeholder="寶貝平常怎麼稱呼"
-                        value={childProfile.nickname}
-                        onChange={(event) =>
-                          updateChildProfile("nickname", event.target.value)
-                        }
-                        required
-                      />
-                    </label>
-                    <label>
-                      地址
-                      <input
-                        placeholder="到府或指定場地地址"
-                        value={childProfile.address}
-                        onChange={(event) =>
-                          updateChildProfile("address", event.target.value)
-                        }
-                        required
-                      />
-                    </label>
-                    <label>
-                      喜好
-                      <input
-                        placeholder="動物、樂高、卡通等等"
-                        value={childProfile.preferences}
-                        onChange={(event) =>
-                          updateChildProfile("preferences", event.target.value)
-                        }
-                        required
-                      />
-                    </label>
-                    <label>
-                      個性
-                      <input
-                        placeholder="外向、怕生、慢熟等等"
-                        value={childProfile.personality}
-                        onChange={(event) =>
-                          updateChildProfile("personality", event.target.value)
-                        }
-                        required
-                      />
-                    </label>
-                  </div>
-                )}
+                        {childProfiles.length > 0 && (
+                          <label>
+                            選擇寶貝
+                            <select
+                              value={entry.selectedId}
+                              onChange={(event) =>
+                                updateChildProfileSelection(
+                                  entry.key,
+                                  event.target.value,
+                                )
+                              }
+                            >
+                              {childProfiles.map((profile) => (
+                                <option key={profile.id} value={profile.id}>
+                                  {profile.nickname}
+                                  {profile.address ? `｜${profile.address}` : ""}
+                                </option>
+                              ))}
+                              <option value="new">新增寶貝資料</option>
+                            </select>
+                          </label>
+                        )}
+
+                        {selectedExistingChild && (
+                          <div className="child-profile-preview">
+                            <strong>{selectedExistingChild.nickname}</strong>
+                            <span>
+                              {selectedExistingChild.age}｜
+                              {selectedExistingChild.gender}
+                            </span>
+                            {selectedExistingChild.address && (
+                              <p>{selectedExistingChild.address}</p>
+                            )}
+                            {selectedExistingChild.preferences && (
+                              <p>喜好：{selectedExistingChild.preferences}</p>
+                            )}
+                            <p>個性：{selectedExistingChild.personality}</p>
+                          </div>
+                        )}
+
+                        {needsChildProfileForm && (
+                          <div className="child-profile-grid">
+                            <label>
+                              年齡
+                              <input
+                                placeholder="例如：3 歲"
+                                value={entry.profile.age}
+                                onChange={(event) =>
+                                  updateChildProfile(
+                                    entry.key,
+                                    "age",
+                                    event.target.value,
+                                  )
+                                }
+                                required
+                              />
+                            </label>
+                            <label>
+                              性別
+                              <input
+                                placeholder="例如：女 / 男"
+                                value={entry.profile.gender}
+                                onChange={(event) =>
+                                  updateChildProfile(
+                                    entry.key,
+                                    "gender",
+                                    event.target.value,
+                                  )
+                                }
+                                required
+                              />
+                            </label>
+                            <label>
+                              稱呼（暱稱）
+                              <input
+                                placeholder="寶貝平常怎麼稱呼"
+                                value={entry.profile.nickname}
+                                onChange={(event) =>
+                                  updateChildProfile(
+                                    entry.key,
+                                    "nickname",
+                                    event.target.value,
+                                  )
+                                }
+                                required
+                              />
+                            </label>
+                            <label>
+                              個性
+                              <input
+                                placeholder="外向、怕生、慢熟等等"
+                                value={entry.profile.personality}
+                                onChange={(event) =>
+                                  updateChildProfile(
+                                    entry.key,
+                                    "personality",
+                                    event.target.value,
+                                  )
+                                }
+                                required
+                              />
+                            </label>
+                            <label>
+                              地址（選填）
+                              <input
+                                placeholder="到府或指定場地地址"
+                                value={entry.profile.address}
+                                onChange={(event) =>
+                                  updateChildProfile(
+                                    entry.key,
+                                    "address",
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </label>
+                            <label>
+                              喜好（選填）
+                              <input
+                                placeholder="動物、樂高、卡通等等"
+                                value={entry.profile.preferences}
+                                onChange={(event) =>
+                                  updateChildProfile(
+                                    entry.key,
+                                    "preferences",
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               <label className="wide">

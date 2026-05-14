@@ -27,6 +27,8 @@ import { createServiceSupabaseClient } from "@/lib/supabase/server";
 type SupabaseClient = ReturnType<typeof createServiceSupabaseClient>;
 
 const KIDS_GROUP_CLASS_ITEM_CODE = "kids_group_class";
+const MIN_GROUP_PARTICIPANTS = 3;
+const MAX_GROUP_PARTICIPANTS = 4;
 const kidsPlayItemCodes = new Set(
   KIDS_PLAY_SERVICES.map((service) => service.itemCode),
 );
@@ -86,6 +88,8 @@ export async function POST(request: Request) {
     participant_count?: number;
     child_profile_id?: string | null;
     child_profile?: Partial<ChildProfileInput> | null;
+    child_profile_ids?: string[] | null;
+    child_profiles?: Array<Partial<ChildProfileInput>> | null;
     line_access_token?: string | null;
   } | null;
 
@@ -139,9 +143,14 @@ export async function POST(request: Request) {
     const isWholeHour = durationMs % hourMs === 0;
     const hours = durationMs / hourMs;
 
-    if (isKidsGroupClass && (!Number.isFinite(participantCount) || participantCount < 3)) {
+    if (
+      isKidsGroupClass &&
+      (!Number.isFinite(participantCount) ||
+        participantCount < MIN_GROUP_PARTICIPANTS ||
+        participantCount > MAX_GROUP_PARTICIPANTS)
+    ) {
       return NextResponse.json(
-        { error: "小團互動課至少需要 3 人。" },
+        { error: "小團互動課人數需為 3-4 位。" },
         { status: 400 },
       );
     }
@@ -171,41 +180,86 @@ export async function POST(request: Request) {
     ? await verifyLiffAccessToken(body.line_access_token, lineChannel)
     : null;
   let childProfileId: string | null = null;
-  let childProfileSummary = "";
+  const childProfileIds: string[] = [];
+  const childProfileSummaries: string[] = [];
 
   if (isKidsPlay) {
-    if (body.child_profile_id && lineProfile) {
-      const { data: existingProfile, error: profileError } = await supabase
-        .from("child_profiles")
-        .select("id,age,gender,nickname,address,preferences,personality")
-        .eq("id", body.child_profile_id)
-        .eq("line_user_id", lineProfile.userId)
-        .maybeSingle();
+    const requestedChildProfileIds = (
+      Array.isArray(body.child_profile_ids)
+        ? body.child_profile_ids
+        : body.child_profile_id
+          ? [body.child_profile_id]
+          : []
+    ).filter((id): id is string => Boolean(id?.trim()));
+    const requestedChildProfiles = (
+      Array.isArray(body.child_profiles)
+        ? body.child_profiles
+        : body.child_profile
+          ? [body.child_profile]
+          : []
+    ).map((profile) => normalizeChildProfile(profile));
+    const submittedChildCount =
+      requestedChildProfileIds.length + requestedChildProfiles.length;
+    const requiredChildCount = isKidsGroupClass ? participantCount : 1;
 
-      if (profileError) {
-        console.error("Unable to load selected child profile", profileError);
+    if (submittedChildCount !== requiredChildCount) {
+      return NextResponse.json(
+        { error: `請提供 ${requiredChildCount} 位寶貝資料。` },
+        { status: 400 },
+      );
+    }
+
+    if (requestedChildProfileIds.length) {
+      if (!lineProfile) {
+        return NextResponse.json(
+          { error: "請重新透過 LINE 開啟頁面後選擇既有寶貝。" },
+          { status: 400 },
+        );
       }
 
-      if (!existingProfile) {
+      const { data: existingProfiles, error: profileError } = await supabase
+        .from("child_profiles")
+        .select("id,age,gender,nickname,address,preferences,personality")
+        .eq("line_user_id", lineProfile.userId)
+        .in("id", requestedChildProfileIds);
+
+      if (profileError) {
+        console.error("Unable to load selected child profiles", profileError);
+      }
+
+      if (
+        !existingProfiles ||
+        existingProfiles.length !== requestedChildProfileIds.length
+      ) {
         return NextResponse.json(
           { error: "寶貝資料不正確，請重新選擇或新增。" },
           { status: 400 },
         );
       }
 
-      childProfileId = existingProfile.id;
-      childProfileSummary = formatChildProfileSummary(existingProfile as ChildProfile);
-    } else {
-      const normalizedChildProfile = normalizeChildProfile(body.child_profile || null);
+      const profilesById = new Map(
+        existingProfiles.map((profile) => [profile.id, profile as ChildProfile]),
+      );
 
+      for (const id of requestedChildProfileIds) {
+        const existingProfile = profilesById.get(id);
+
+        if (existingProfile) {
+          childProfileIds.push(existingProfile.id);
+          childProfileSummaries.push(formatChildProfileSummary(existingProfile));
+        }
+      }
+    }
+
+    for (const normalizedChildProfile of requestedChildProfiles) {
       if (!isCompleteChildProfile(normalizedChildProfile)) {
         return NextResponse.json(
-          { error: "請完整填寫寶貝資料。" },
+          { error: "請完整填寫每位寶貝的年齡、性別、稱呼與個性。" },
           { status: 400 },
         );
       }
 
-      childProfileSummary = formatChildProfileSummary(normalizedChildProfile);
+      childProfileSummaries.push(formatChildProfileSummary(normalizedChildProfile));
 
       if (lineProfile) {
         const { data: insertedProfile, error: insertProfileError } = await supabase
@@ -221,12 +275,17 @@ export async function POST(request: Request) {
         if (insertProfileError) {
           console.error("Unable to create child profile", insertProfileError);
         } else {
-          childProfileId = insertedProfile.id;
+          childProfileIds.push(insertedProfile.id);
         }
       }
     }
+
+    childProfileId = childProfileIds[0] || null;
   }
 
+  const childProfileSummary = childProfileSummaries
+    .map((summary, index) => `寶貝 ${index + 1}：\n${summary}`)
+    .join("\n\n");
   const noteSections = [
     body.note?.trim() ? `家長備註：${body.note.trim()}` : "",
     isKidsGroupClass ? `小團人數：${participantCount} 人` : "",
@@ -307,6 +366,22 @@ export async function POST(request: Request) {
       { code: "BOOKING_FAILED", error: "預約建立失敗。" },
       { status: 500 },
     );
+  }
+
+  if (childProfileIds.length > 1) {
+    const { error: linkError } = await supabase
+      .from("booking_child_profiles")
+      .insert(
+        childProfileIds.map((profileId, index) => ({
+          booking_id: data.id,
+          child_profile_id: profileId,
+          position: index + 1,
+        })),
+      );
+
+    if (linkError) {
+      console.error("Unable to link child profiles to booking", linkError);
+    }
   }
 
   const adminUserId = getLineChannelConfig(lineChannel).adminUserId;

@@ -581,9 +581,16 @@ textarea:focus {
 }
 
 .child-profile-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+}
+
+.child-profile-head > div {
   display: grid;
   gap: 4px;
-  color: var(--muted);
 }
 
 .child-profile-head span {
@@ -595,6 +602,62 @@ textarea:focus {
 .child-profile-head strong {
   color: var(--ink);
   font-size: 18px;
+}
+
+.add-child-button {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.add-child-button:disabled {
+  opacity: 0.42;
+}
+
+.child-profile-list {
+  display: grid;
+  gap: 14px;
+}
+
+.child-profile-card {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid rgba(220, 185, 144, 0.9);
+  border-radius: 8px;
+  background: #fffdf8;
+}
+
+.child-profile-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.child-profile-card-head strong {
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.remove-child-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(163, 61, 45, 0.25);
+  border-radius: 999px;
+  background: #fff4ef;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 850;
 }
 
 .child-profile-grid {
@@ -1497,7 +1560,8 @@ textarea:focus {
 
   .hero-strip,
   .service-gallery,
-  .grid {
+  .grid,
+  .child-profile-grid {
     grid-template-columns: 1fr;
   }
 

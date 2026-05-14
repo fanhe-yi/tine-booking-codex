@@ -27,8 +27,6 @@ export function isCompleteChildProfile(profile: ChildProfileInput) {
     profile.age &&
       profile.gender &&
       profile.nickname &&
-      profile.address &&
-      profile.preferences &&
       profile.personality,
   );
 }
@@ -38,8 +36,8 @@ export function formatChildProfileSummary(profile: ChildProfileInput) {
     `年齡：${profile.age}`,
     `性別：${profile.gender}`,
     `稱呼：${profile.nickname}`,
-    `地址：${profile.address}`,
-    `喜好：${profile.preferences}`,
+    profile.address ? `地址：${profile.address}` : "",
+    profile.preferences ? `喜好：${profile.preferences}` : "",
     `個性：${profile.personality}`,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
